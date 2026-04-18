@@ -1,51 +1,41 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-import time
-
-# 彻底屏蔽matplotlib字体警告，避免控制台刷屏报错
 import warnings
+
+# 屏蔽所有字体警告，杜绝控制台刷屏
 warnings.filterwarnings("ignore", category=UserWarning)
 
-# 只使用Streamlit云端自带的无衬线字体，杜绝字体查找失败
+# 强制使用云端自带字体，彻底解决乱码
 plt.rcParams['font.family'] = ['sans-serif']
 plt.rcParams['font.sans-serif'] = ['DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
 
+# 页面基础设置
 st.set_page_config(layout="wide", page_title="Elastic Collision Simulation")
 st.title("Elastic Collision Simulation")
 
-# 初始化会话状态
-if "frame" not in st.session_state:
-    st.session_state.frame = 0
-if "running" not in st.session_state:
-    st.session_state.running = False
-if "data_cache" not in st.session_state:
-    st.session_state.data_cache = None
-
-# 参数滑块，和你截图布局1:1还原
+# 1. 实时参数滑块（参数一变，整个脚本就会重新执行）
 col1, col2 = st.columns(2)
 with col1:
-    m1 = st.slider("m1 (kg)", 0.1, 5.0, 1.0, 0.1)
+    m1 = st.slider("m1 (kg)", 0.1, 5.0, 1.0, 0.1, key="m1_slider")
 with col2:
-    m2 = st.slider("m2 (kg)", 0.1, 5.0, 2.0, 0.1)
+    m2 = st.slider("m2 (kg)", 0.1, 5.0, 2.0, 0.1, key="m2_slider")
 
 col3, col4 = st.columns(2)
 with col3:
-    v1 = st.slider("v1 (m/s)", -3.0, 3.0, 2.0, 0.1)
+    v1 = st.slider("v1 (m/s)", -3.0, 3.0, 2.0, 0.1, key="v1_slider")
 with col4:
-    v2 = st.slider("v2 (m/s)", -3.0, 3.0, -1.0, 0.1)
+    v2 = st.slider("v2 (m/s)", -3.0, 3.0, -1.0, 0.1, key="v2_slider")
 
-# 重置按钮
-if st.button("Reset Simulation"):
+# 2. 重置按钮
+if st.button("Reset Simulation", key="reset_btn"):
     st.session_state.frame = 0
     st.session_state.running = False
-    st.session_state.data_cache = None
     st.rerun()
 
-# 预计算缓存：只在参数变化时算一次，不重复计算
-@st.cache_data
-def simulate(m1, m2, v1, v2):
+# 3. 物理仿真（每次参数变化都会重新计算）
+def run_simulation(m1, m2, v1, v2):
     r = 0.2
     dt = 0.01
     t_total = 5.0
@@ -74,15 +64,16 @@ def simulate(m1, m2, v1, v2):
 
     return x1_arr, x2_arr, v1_arr, v2_arr, t_total, steps
 
-# 加载缓存数据
-params = (m1, m2, v1, v2)
-if st.session_state.data_cache is None or st.session_state.data_cache[:4] != params:
-    x1_arr, x2_arr, v1_arr, v2_arr, t_total, steps = simulate(*params)
-    st.session_state.data_cache = params + (x1_arr, x2_arr, v1_arr, v2_arr, t_total, steps)
-else:
-    _, _, _, _, x1_arr, x2_arr, v1_arr, v2_arr, t_total, steps = st.session_state.data_cache
+# 每次运行脚本都会重新算一次数据
+x1_arr, x2_arr, v1_arr, v2_arr, t_total, steps = run_simulation(m1, m2, v1, v2)
 
-# 绘图：只在当前帧渲染，避免不必要的重绘
+# 4. 初始化状态
+if "frame" not in st.session_state:
+    st.session_state.frame = 0
+if "running" not in st.session_state:
+    st.session_state.running = False
+
+# 5. 绘制图像（和你截图1:1还原）
 fig, (ax_sim, ax_plot) = plt.subplots(1, 2, figsize=(12, 6))
 
 # 左侧碰撞场景
@@ -114,20 +105,20 @@ ax_plot.legend()
 
 st.pyplot(fig)
 
-# 播放/暂停控制
+# 6. 播放/暂停控制
 col_btn1, col_btn2 = st.columns(2)
 with col_btn1:
-    if st.button("▶ Play"):
+    if st.button("▶ Play", key="play_btn"):
         st.session_state.running = True
 with col_btn2:
-    if st.button("⏸ Pause"):
+    if st.button("⏸ Pause", key="pause_btn"):
         st.session_state.running = False
 
-# 放慢刷新频率，解决闪烁
+# 7. 自动播放逻辑（放慢刷新频率，不卡）
 if st.session_state.running:
     st.session_state.frame += 1
     if st.session_state.frame >= steps:
         st.session_state.frame = 0
-    # 降低刷新频率，减少页面重绘压力
+    import time
     time.sleep(0.03)
     st.rerun()
