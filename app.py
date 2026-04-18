@@ -188,3 +188,5 @@ update();
 '''
 
 st.components.v1.html(html_code, height=400)
+
+st.info("✅ 左侧：完全弹性碰撞仿真动画（丝滑流畅）\n✅ 右侧：同步实时速度-时间变化曲线\n✅ 播放 / 暂停 / 重置 全局联动")
