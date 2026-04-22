@@ -148,23 +148,23 @@ const side_ek2 = document.getElementById("side_ek2");
 const side_ekt = document.getElementById("side_ekt");
 
 // 碰撞计算
-function collideOneDim(){
-    if(Math.abs(x1 - x2) < 2*r){
+function collideOneDim(){{
+    if(Math.abs(x1 - x2) < 2*r){{
         let v1New = ((m1 - e*m2)*v1 + (1+e)*m2*v2) / (m1 + m2);
         let v2New = ((m2 - e*m1)*v2 + (1+e)*m1*v1) / (m1 + m2);
         v1 = v1New;
         v2 = v2New;
-    }
-}
+    }}
+}}
 
 // 边界反弹
-function boundaryBounce(){
+function boundaryBounce(){{
     if(x1 < r || x1 > aniCvs.width - r) v1 = -v1;
     if(x2 < r || x2 > aniCvs.width - r) v2 = -v2;
-}
+}}
 
 // 绘制碰撞小球
-function drawBall(){
+function drawBall(){{
     aniCtx.clearRect(0,0,aniCvs.width,aniCvs.height);
     aniCtx.beginPath();
     aniCtx.arc(x1, aniCvs.height/2, r, 0, Math.PI*2);
@@ -172,10 +172,10 @@ function drawBall(){
     aniCtx.beginPath();
     aniCtx.arc(x2, aniCvs.height/2, r, 0, Math.PI*2);
     aniCtx.fillStyle="#2196F3"; aniCtx.fill();
-}
+}}
 
 // 实时更新右侧全部数据
-function updateSideData(){
+function updateSideData(){{
     let p1 = m1 * v1;
     let p2 = m2 * v2;
     let pTotal = p1 + p2;
@@ -195,10 +195,10 @@ function updateSideData(){
     side_ek1.innerText = ek1.toFixed(2);
     side_ek2.innerText = ek2.toFixed(2);
     side_ekt.innerText = ekTotal.toFixed(2);
-}
+}}
 
 // 速度-时间图
-function drawVelChart(){
+function drawVelChart(){{
     velCtx.clearRect(0,0,velCvs.width,velCvs.height);
     let ox=40, oy=velCvs.height/2;
     velCtx.strokeStyle="#ccc";
@@ -206,26 +206,26 @@ function drawVelChart(){
     
     velCtx.strokeStyle="#f44336";
     velCtx.beginPath();
-    for(let i=0;i<tList.length;i++){
+    for(let i=0;i<tList.length;i++){{
         let px = ox + tList[i]*8;
         let py = oy - v1List[i]*5;
         i===0 ? velCtx.moveTo(px,py) : velCtx.lineTo(px,py);
-    }
+    }}
     velCtx.stroke();
 
     velCtx.strokeStyle="#2196F3";
     velCtx.beginPath();
-    for(let i=0;i<tList.length;i++){
+    for(let i=0;i<tList.length;i++){{
         let px = ox + tList[i]*8;
         let py = oy - v2List[i]*5;
         i===0 ? velCtx.moveTo(px,py) : velCtx.lineTo(px,py);
-    }
+    }}
     velCtx.stroke();
     velCtx.fillText("速度 - 时间图像",45,18);
-}
+}}
 
 // 动能-时间图
-function drawEkChart(){
+function drawEkChart(){{
     ekCtx.clearRect(0,0,ekCvs.width,ekCvs.height);
     let ox=40, oy=ekCvs.height-25;
     ekCtx.strokeStyle="#ccc";
@@ -233,37 +233,37 @@ function drawEkChart(){
 
     ekCtx.strokeStyle="#f44336";
     ekCtx.beginPath();
-    for(let i=0;i<tList.length;i++){
+    for(let i=0;i<tList.length;i++){{
         let px = ox + tList[i]*8;
         let py = oy - ek1List[i]*1.5;
         i===0 ? ekCtx.moveTo(px,py) : ekCtx.lineTo(px,py);
-    }
+    }}
     ekCtx.stroke();
 
     ekCtx.strokeStyle="#2196F3";
     ekCtx.beginPath();
-    for(let i=0;i<tList.length;i++){
+    for(let i=0;i<tList.length;i++){{
         let px = ox + tList[i]*8;
         let py = oy - ek2List[i]*1.5;
         i===0 ? ekCtx.moveTo(px,py) : ekCtx.lineTo(px,py);
-    }
+    }}
     ekCtx.stroke();
 
     ekCtx.strokeStyle="#666";
     ekCtx.setLineDash([4,4]);
     ekCtx.beginPath();
-    for(let i=0;i<tList.length;i++){
+    for(let i=0;i<tList.length;i++){{
         let px = ox + tList[i]*8;
         let py = oy - ekSumList[i]*1.5;
         i===0 ? ekCtx.moveTo(px,py) : ekCtx.lineTo(px,py);
-    }
+    }}
     ekCtx.stroke();
     ekCtx.setLineDash([]);
     ekCtx.fillText("动能 - 时间图像",45,18);
-}
+}}
 
 // 动量-时间图
-function drawMomChart(){
+function drawMomChart(){{
     momCtx.clearRect(0,0,momCvs.width,momCvs.height);
     let ox=40, oy=momCvs.height/2;
     momCtx.strokeStyle="#ccc";
@@ -271,38 +271,38 @@ function drawMomChart(){
     
     momCtx.strokeStyle="#f44336";
     momCtx.beginPath();
-    for(let i=0;i<tList.length;i++){
+    for(let i=0;i<tList.length;i++){{
         let px = ox + tList[i]*8;
         let py = oy - p1List[i]*2.5;
         i===0 ? momCtx.moveTo(px,py) : momCtx.lineTo(px,py);
-    }
+    }}
     momCtx.stroke();
 
     momCtx.strokeStyle="#2196F3";
     momCtx.beginPath();
-    for(let i=0;i<tList.length;i++){
+    for(let i=0;i<tList.length;i++){{
         let px = ox + tList[i]*8;
         let py = oy - p2List[i]*2.5;
         i===0 ? momCtx.moveTo(px,py) : momCtx.lineTo(px,py);
-    }
+    }}
     momCtx.stroke();
 
     momCtx.strokeStyle="#444";
     momCtx.setLineDash([4,4]);
     momCtx.beginPath();
-    for(let i=0;i<tList.length;i++){
+    for(let i=0;i<tList.length;i++){{
         let px = ox + tList[i]*8;
         let py = oy - pTotalList[i]*2.5;
         i===0 ? momCtx.moveTo(px,py) : momCtx.lineTo(px,py);
-    }
+    }}
     momCtx.stroke();
     momCtx.setLineDash([]);
     momCtx.fillText("动量 - 时间图像",45,18);
-}
+}}
 
 // 主动画循环
-function update(){
-    if(playing){
+function update(){{
+    if(playing){{
         x1 += v1 * dt * 2;
         x2 += v2 * dt * 2;
 
@@ -322,14 +322,14 @@ function update(){
         ek1List.push(ek1);ek2List.push(ek2);ekSumList.push(eks);
         p1List.push(p1);p2List.push(p2);pTotalList.push(pt);
 
-        if(tList.length>600){
+        if(tList.length>600){{
             tList.shift();v1List.shift();v2List.shift();
             ek1List.shift();ek2List.shift();ekSumList.shift();
             p1List.shift();p2List.shift();pTotalList.shift();
-        }
+        }}
 
         updateSideData();
-    }
+    }}
 
     drawBall();
     drawVelChart();
@@ -337,12 +337,12 @@ function update(){
     drawMomChart();
 
     requestAnimationFrame(update);
-}
+}}
 
 // 控制函数
-function play(){playing=true;}
-function pause(){playing=false;}
-function reset(){
+function play(){{playing=true;}}
+function pause(){{playing=false;}}
+function reset(){{
     playing=false;
     x1={x1_0};x2={x2_0};
     v1={v1_0};v2={v2_0};
@@ -354,7 +354,7 @@ function reset(){
 
     updateSideData();
     drawBall();drawVelChart();drawEkChart();drawMomChart();
-}
+}}
 
 // 初始化
 updateSideData();
