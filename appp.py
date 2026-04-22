@@ -1,23 +1,23 @@
 import streamlit as st
 
-st.set_page_config(layout="wide", page_title="一维碰撞仿真 | 布局重构版")
+st.set_page_config(layout="wide", page_title="一维碰撞仿真 | PhET风格布局")
 st.title("一维对心碰撞仿真（弹性/非弹性/完全非弹性）")
 
 # 顶部参数输入区
 col1, col2, col3 = st.columns(3)
 with col1:
-    m1 = st.number_input("小球1 质量 m1 (kg)", value=1.0, step=0.1)
+    m1 = st.number_input("小球1 质量 m1 (kg)", value=0.5, step=0.1)
     x1_0 = st.number_input("小球1 初始位置 x1₀", value=80.0, step=1.0)
     v1_0 = st.number_input("小球1 初始速度 v1₀ (m/s)", value=6.0, step=0.5)
 with col2:
-    m2 = st.number_input("小球2 质量 m2 (kg)", value=3.0, step=0.1)
+    m2 = st.number_input("小球2 质量 m2 (kg)", value=1.5, step=0.1)
     x2_0 = st.number_input("小球2 初始位置 x2₀", value=300.0, step=1.0)
     v2_0 = st.number_input("小球2 初始速度 v2₀ (m/s)", value=-2.0, step=0.5)
 with col3:
     e = st.number_input("碰撞恢复系数 e (0~1)", min_value=0.0, max_value=1.0, value=0.8, step=0.05)
 
-# 整体左右分栏：左边动画+三张图，右边全部数据总面板
-left_col, right_col = st.columns([2.2, 1])
+# 整体布局：上动画+下三图，右侧数据
+left_main, right_data = st.columns([2.5, 1])
 
 html_code = f'''
 <!DOCTYPE html>
@@ -25,79 +25,99 @@ html_code = f'''
 <head>
 <style>
 body {{margin:0;padding:0;font-family:sans-serif;background:#f9f9f9;}}
-/* 左侧：动画 + 三张图表垂直排列 */
-.left-wrap{{width:100%;display:flex;flex-direction:column;gap:15px;}}
-/* 右侧：超大整块数据面板 */
-.right-data{{
-    background:#f0f7ff;
-    padding:20px;
-    border-radius:10px;
-    border:1px solid #cce0f5;
-    font-size:15px;
-    line-height:2.2;
-}}
-.ani-box{{width:100%;}}
-canvas{{background:#fff;border:1px solid #ddd;border-radius:8px;width:100%;}}
+/* 整体布局 */
+.top-row{{display:flex;gap:20px;padding:10px;}}
+.ani-wrap{{flex:2.5;}}
+.data-wrap{{flex:1;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;}}
+.bottom-charts{{padding:10px;display:flex;flex-direction:column;gap:15px;}}
+/* 数据面板样式，和PhET一致 */
+.data-row{{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee;}}
+.data-label{{color:#555;}}
+.data-value{{font-weight:bold;color:#222;}}
 .controls{{margin:10px 0;text-align:center;}}
 button{{padding:8px 20px;margin:0 8px;border:none;border-radius:6px;background:#2196F3;color:#fff;cursor:pointer;font-size:15px;}}
-h4{{margin:5px 0;color:#1976D2;}}
+canvas{{background:#fff;border:1px solid #ddd;border-radius:8px;width:100%;}}
 </style>
 </head>
 <body>
 
-<div style="display:flex;gap:20px;">
-    <!-- 左侧：上动画 + 下依次：速度→动能→动量 三张图 -->
-    <div class="left-wrap">
+<!-- 上半部分：动画 + 右侧数据 -->
+<div class="top-row">
+    <div class="ani-wrap">
         <div class="controls">
             <button onclick="play()">播放</button>
             <button onclick="pause()">暂停</button>
             <button onclick="reset()">重置</button>
         </div>
-
-        <!-- 1. 一维碰撞动态动画（左上） -->
-        <div class="ani-box">
-            <canvas id="aniCanvas" height="200"></canvas>
-        </div>
-
-        <!-- 2. 速度-时间图像 -->
-        <div>
-            <canvas id="velCanvas" height="180"></canvas>
-        </div>
-
-        <!-- 3. 动能-时间图像 -->
-        <div>
-            <canvas id="ekCanvas" height="180"></canvas>
-        </div>
-
-        <!-- 4. 动量-时间图像 -->
-        <div>
-            <canvas id="momCanvas" height="180"></canvas>
-        </div>
+        <canvas id="aniCanvas" height="220"></canvas>
     </div>
 
-    <!-- 右侧：整合所有参数+实时数据大面板 -->
-    <div class="right-data">
-        <h4>【初始设置参数】</h4>
-        小球1 质量 m1 = <span id="side_m1">{m1}</span> kg<br/>
-        小球2 质量 m2 = <span id="side_m2">{m2}</span> kg<br/>
-        恢复系数 e = <span id="side_e">{e}</span><br/>
-        <hr/>
-
-        <h4>【实时运动数据】</h4>
-        小球1 位置：<span id="side_x1">0.00</span><br/>
-        小球2 位置：<span id="side_x2">0.00</span><br/>
-        小球1 速度：<span id="side_v1">0.00</span> m/s<br/>
-        小球2 速度：<span id="side_v2">0.00</span> m/s<br/>
-        <hr/>
-
-        <h4>【动量 & 动能数据】</h4>
-        小球1 动量：<span id="side_p1">0.00</span><br/>
-        小球2 动量：<span id="side_p2">0.00</span><br/>
-        系统总动量：<span id="side_pt">0.00</span><br/>
-        小球1 动能：<span id="side_ek1">0.00</span><br/>
-        小球2 动能：<span id="side_ek2">0.00</span><br/>
-        系统总动能：<span id="side_ekt">0.00</span>
+    <!-- 右侧逐条数据面板 -->
+    <div class="data-wrap">
+        <h4 style="margin-top:0;">实时数据面板</h4>
+        <div class="data-row">
+            <span class="data-label">小球1 质量 (kg)</span>
+            <span class="data-value" id="m1_val">{m1}</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label">小球2 质量 (kg)</span>
+            <span class="data-value" id="m2_val">{m2}</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label">恢复系数 e</span>
+            <span class="data-value" id="e_val">{e}</span>
+        </div>
+        <hr>
+        <div class="data-row">
+            <span class="data-label">小球1 位置 (m)</span>
+            <span class="data-value" id="x1_val">0.00</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label">小球2 位置 (m)</span>
+            <span class="data-value" id="x2_val">0.00</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label">小球1 速度 (m/s)</span>
+            <span class="data-value" id="v1_val">0.00</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label">小球2 速度 (m/s)</span>
+            <span class="data-value" id="v2_val">0.00</span>
+        </div>
+        <hr>
+        <div class="data-row">
+            <span class="data-label">小球1 动量 (kg·m/s)</span>
+            <span class="data-value" id="p1_val">0.00</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label">小球2 动量 (kg·m/s)</span>
+            <span class="data-value" id="p2_val">0.00</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label">系统总动量</span>
+            <span class="data-value" id="pt_val">0.00</span>
+        </div>
+        <hr>
+        <div class="data-row">
+            <span class="data-label">小球1 动能 (J)</span>
+            <span class="data-value" id="ek1_val">0.00</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label">小球2 动能 (J)</span>
+            <span class="data-value" id="ek2_val">0.00</span>
+        </div>
+        <div class="data-row">
+            <span class="data-label">系统总动能</span>
+            <span class="data-value" id="ekt_val">0.00</span>
+        </div>
     </div>
+</div>
+
+<!-- 下半部分：三张曲线图 -->
+<div class="bottom-charts">
+    <canvas id="velCanvas" height="160"></canvas>
+    <canvas id="ekCanvas" height="160"></canvas>
+    <canvas id="momCanvas" height="160"></canvas>
 </div>
 
 <script>
@@ -135,17 +155,43 @@ const ekCtx = ekCvs.getContext("2d");
 const momCvs = document.getElementById("momCanvas");
 const momCtx = momCvs.getContext("2d");
 
-// 右侧侧边数据DOM
-const side_x1 = document.getElementById("side_x1");
-const side_x2 = document.getElementById("side_x2");
-const side_v1 = document.getElementById("side_v1");
-const side_v2 = document.getElementById("side_v2");
-const side_p1 = document.getElementById("side_p1");
-const side_p2 = document.getElementById("side_p2");
-const side_pt = document.getElementById("side_pt");
-const side_ek1 = document.getElementById("side_ek1");
-const side_ek2 = document.getElementById("side_ek2");
-const side_ekt = document.getElementById("side_ekt");
+// 数据DOM
+const x1Val = document.getElementById("x1_val");
+const x2Val = document.getElementById("x2_val");
+const v1Val = document.getElementById("v1_val");
+const v2Val = document.getElementById("v2_val");
+const p1Val = document.getElementById("p1_val");
+const p2Val = document.getElementById("p2_val");
+const ptVal = document.getElementById("pt_val");
+const ek1Val = document.getElementById("ek1_val");
+const ek2Val = document.getElementById("ek2_val");
+const ektVal = document.getElementById("ekt_val");
+
+// 防抖刷新数据（解决闪屏）
+let lastUpdate = 0;
+function updateData(){{
+    const now = Date.now();
+    if (now - lastUpdate < 100) return; // 100ms刷新一次，不闪
+    lastUpdate = now;
+
+    let p1 = m1 * v1;
+    let p2 = m2 * v2;
+    let pt = p1 + p2;
+    let ek1 = 0.5 * m1 * v1 * v1;
+    let ek2 = 0.5 * m2 * v2 * v2;
+    let ekt = ek1 + ek2;
+
+    x1Val.innerText = x1.toFixed(2);
+    x2Val.innerText = x2.toFixed(2);
+    v1Val.innerText = v1.toFixed(2);
+    v2Val.innerText = v2.toFixed(2);
+    p1Val.innerText = p1.toFixed(2);
+    p2Val.innerText = p2.toFixed(2);
+    ptVal.innerText = pt.toFixed(2);
+    ek1Val.innerText = ek1.toFixed(2);
+    ek2Val.innerText = ek2.toFixed(2);
+    ektVal.innerText = ekt.toFixed(2);
+}}
 
 // 碰撞计算
 function collideOneDim(){{
@@ -163,9 +209,14 @@ function boundaryBounce(){{
     if(x2 < r || x2 > aniCvs.width - r) v2 = -v2;
 }}
 
-// 绘制碰撞小球
+// 绘制小球
 function drawBall(){{
     aniCtx.clearRect(0,0,aniCvs.width,aniCvs.height);
+    aniCtx.beginPath();
+    aniCtx.moveTo(0, aniCvs.height/2);
+    aniCtx.lineTo(aniCvs.width, aniCvs.height/2);
+    aniCtx.strokeStyle="#ccc";
+    aniCtx.stroke();
     aniCtx.beginPath();
     aniCtx.arc(x1, aniCvs.height/2, r, 0, Math.PI*2);
     aniCtx.fillStyle="#f44336"; aniCtx.fill();
@@ -174,41 +225,27 @@ function drawBall(){{
     aniCtx.fillStyle="#2196F3"; aniCtx.fill();
 }}
 
-// 实时更新右侧全部数据
-function updateSideData(){{
-    let p1 = m1 * v1;
-    let p2 = m2 * v2;
-    let pTotal = p1 + p2;
-    let ek1 = 0.5 * m1 * v1 * v1;
-    let ek2 = 0.5 * m2 * v2 * v2;
-    let ekTotal = ek1 + ek2;
-
-    side_x1.innerText = x1.toFixed(2);
-    side_x2.innerText = x2.toFixed(2);
-    side_v1.innerText = v1.toFixed(2);
-    side_v2.innerText = v2.toFixed(2);
-
-    side_p1.innerText = p1.toFixed(2);
-    side_p2.innerText = p2.toFixed(2);
-    side_pt.innerText = pTotal.toFixed(2);
-
-    side_ek1.innerText = ek1.toFixed(2);
-    side_ek2.innerText = ek2.toFixed(2);
-    side_ekt.innerText = ekTotal.toFixed(2);
+// 带坐标轴刻度的通用绘图函数
+function drawAxis(ctx, cvs, title, isZeroCenter=false){{
+    const w = cvs.width, h = cvs.height;
+    const ox = 40, oy = isZeroCenter ? h/2 : h-25;
+    ctx.clearRect(0,0,w,h);
+    ctx.strokeStyle="#ccc";
+    ctx.beginPath();
+    ctx.moveTo(ox,15); ctx.lineTo(ox,h-15); ctx.moveTo(ox,oy); ctx.lineTo(w-10,oy);
+    ctx.stroke();
+    ctx.fillStyle="#555";
+    ctx.fillText(title, 45, 18);
 }}
 
 // 速度-时间图
 function drawVelChart(){{
-    velCtx.clearRect(0,0,velCvs.width,velCvs.height);
-    let ox=40, oy=velCvs.height/2;
-    velCtx.strokeStyle="#ccc";
-    velCtx.beginPath();velCtx.moveTo(ox,15);velCtx.lineTo(ox,velCvs.height-15);velCtx.lineTo(velCvs.width-10,velCvs.height-15);velCtx.stroke();
-    
+    drawAxis(velCtx, velCvs, "速度-时间 (m/s)", true);
     velCtx.strokeStyle="#f44336";
     velCtx.beginPath();
     for(let i=0;i<tList.length;i++){{
-        let px = ox + tList[i]*8;
-        let py = oy - v1List[i]*5;
+        let px = 40 + tList[i]*8;
+        let py = velCvs.height/2 - v1List[i]*5;
         i===0 ? velCtx.moveTo(px,py) : velCtx.lineTo(px,py);
     }}
     velCtx.stroke();
@@ -216,26 +253,21 @@ function drawVelChart(){{
     velCtx.strokeStyle="#2196F3";
     velCtx.beginPath();
     for(let i=0;i<tList.length;i++){{
-        let px = ox + tList[i]*8;
-        let py = oy - v2List[i]*5;
+        let px = 40 + tList[i]*8;
+        let py = velCvs.height/2 - v2List[i]*5;
         i===0 ? velCtx.moveTo(px,py) : velCtx.lineTo(px,py);
     }}
     velCtx.stroke();
-    velCtx.fillText("速度 - 时间图像",45,18);
 }}
 
 // 动能-时间图
 function drawEkChart(){{
-    ekCtx.clearRect(0,0,ekCvs.width,ekCvs.height);
-    let ox=40, oy=ekCvs.height-25;
-    ekCtx.strokeStyle="#ccc";
-    ekCtx.beginPath();ekCtx.moveTo(ox,15);ekCtx.lineTo(ox,oy);ekCtx.lineTo(ekCvs.width-10,oy);ekCtx.stroke();
-
+    drawAxis(ekCtx, ekCvs, "动能-时间 (J)", false);
     ekCtx.strokeStyle="#f44336";
     ekCtx.beginPath();
     for(let i=0;i<tList.length;i++){{
-        let px = ox + tList[i]*8;
-        let py = oy - ek1List[i]*1.5;
+        let px = 40 + tList[i]*8;
+        let py = ekCvs.height-25 - ek1List[i]*1.5;
         i===0 ? ekCtx.moveTo(px,py) : ekCtx.lineTo(px,py);
     }}
     ekCtx.stroke();
@@ -243,8 +275,8 @@ function drawEkChart(){{
     ekCtx.strokeStyle="#2196F3";
     ekCtx.beginPath();
     for(let i=0;i<tList.length;i++){{
-        let px = ox + tList[i]*8;
-        let py = oy - ek2List[i]*1.5;
+        let px = 40 + tList[i]*8;
+        let py = ekCvs.height-25 - ek2List[i]*1.5;
         i===0 ? ekCtx.moveTo(px,py) : ekCtx.lineTo(px,py);
     }}
     ekCtx.stroke();
@@ -253,27 +285,22 @@ function drawEkChart(){{
     ekCtx.setLineDash([4,4]);
     ekCtx.beginPath();
     for(let i=0;i<tList.length;i++){{
-        let px = ox + tList[i]*8;
-        let py = oy - ekSumList[i]*1.5;
+        let px = 40 + tList[i]*8;
+        let py = ekCvs.height-25 - ekSumList[i]*1.5;
         i===0 ? ekCtx.moveTo(px,py) : ekCtx.lineTo(px,py);
     }}
     ekCtx.stroke();
     ekCtx.setLineDash([]);
-    ekCtx.fillText("动能 - 时间图像",45,18);
 }}
 
 // 动量-时间图
 function drawMomChart(){{
-    momCtx.clearRect(0,0,momCvs.width,momCvs.height);
-    let ox=40, oy=momCvs.height/2;
-    momCtx.strokeStyle="#ccc";
-    momCtx.beginPath();momCtx.moveTo(ox,15);momCtx.lineTo(ox,momCvs.height-15);momCtx.lineTo(momCvs.width-10,momCvs.height-15);momCtx.stroke();
-    
+    drawAxis(momCtx, momCvs, "动量-时间 (kg·m/s)", true);
     momCtx.strokeStyle="#f44336";
     momCtx.beginPath();
     for(let i=0;i<tList.length;i++){{
-        let px = ox + tList[i]*8;
-        let py = oy - p1List[i]*2.5;
+        let px = 40 + tList[i]*8;
+        let py = momCvs.height/2 - p1List[i]*2.5;
         i===0 ? momCtx.moveTo(px,py) : momCtx.lineTo(px,py);
     }}
     momCtx.stroke();
@@ -281,8 +308,8 @@ function drawMomChart(){{
     momCtx.strokeStyle="#2196F3";
     momCtx.beginPath();
     for(let i=0;i<tList.length;i++){{
-        let px = ox + tList[i]*8;
-        let py = oy - p2List[i]*2.5;
+        let px = 40 + tList[i]*8;
+        let py = momCvs.height/2 - p2List[i]*2.5;
         i===0 ? momCtx.moveTo(px,py) : momCtx.lineTo(px,py);
     }}
     momCtx.stroke();
@@ -291,13 +318,12 @@ function drawMomChart(){{
     momCtx.setLineDash([4,4]);
     momCtx.beginPath();
     for(let i=0;i<tList.length;i++){{
-        let px = ox + tList[i]*8;
-        let py = oy - pTotalList[i]*2.5;
+        let px = 40 + tList[i]*8;
+        let py = momCvs.height/2 - pTotalList[i]*2.5;
         i===0 ? momCtx.moveTo(px,py) : momCtx.lineTo(px,py);
     }}
     momCtx.stroke();
     momCtx.setLineDash([]);
-    momCtx.fillText("动量 - 时间图像",45,18);
 }}
 
 // 主动画循环
@@ -315,11 +341,11 @@ function update(){{
         let pt = p1+p2;
         let ek1 = 0.5*m1*v1*v1;
         let ek2 = 0.5*m2*v2*v2;
-        let eks = ek1+ek2;
+        let ekt = ek1+ek2;
 
         tList.push(t);
         v1List.push(v1);v2List.push(v2);
-        ek1List.push(ek1);ek2List.push(ek2);ekSumList.push(eks);
+        ek1List.push(ek1);ek2List.push(ek2);ekSumList.push(ekt);
         p1List.push(p1);p2List.push(p2);pTotalList.push(pt);
 
         if(tList.length>600){{
@@ -328,7 +354,7 @@ function update(){{
             p1List.shift();p2List.shift();pTotalList.shift();
         }}
 
-        updateSideData();
+        updateData();
     }}
 
     drawBall();
@@ -352,12 +378,12 @@ function reset(){{
     ek1List=[];ek2List=[];ekSumList=[];
     p1List=[];p2List=[];pTotalList=[];
 
-    updateSideData();
+    updateData();
     drawBall();drawVelChart();drawEkChart();drawMomChart();
 }}
 
 // 初始化
-updateSideData();
+updateData();
 drawBall();drawVelChart();drawEkChart();drawMomChart();
 update();
 </script>
@@ -365,9 +391,8 @@ update();
 </html>
 '''
 
-# 左右放入布局
-with left_col:
-    st.components.v1.html(html_code, height=950)
+with left_main:
+    st.components.v1.html(html_code, height=850)
 
-with right_col:
+with right_data:
     st.empty()
