@@ -1,398 +1,139 @@
 import streamlit as st
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+from matplotlib.patches import Circle
 
-st.set_page_config(layout="wide", page_title="一维碰撞仿真 | PhET风格布局")
-st.title("一维对心碰撞仿真（弹性/非弹性/完全非弹性）")
+# 设置中文字体
+plt.rcParams["font.family"] = ["SimHei", "WenQuanYi Micro Hei", "Heiti TC"]
+plt.rcParams["axes.unicode_minus"] = False
 
-# 顶部参数输入区
-col1, col2, col3 = st.columns(3)
-with col1:
-    m1 = st.number_input("小球1 质量 m1 (kg)", value=0.5, step=0.1)
-    x1_0 = st.number_input("小球1 初始位置 x1₀", value=80.0, step=1.0)
-    v1_0 = st.number_input("小球1 初始速度 v1₀ (m/s)", value=6.0, step=0.5)
-with col2:
-    m2 = st.number_input("小球2 质量 m2 (kg)", value=1.5, step=0.1)
-    x2_0 = st.number_input("小球2 初始位置 x2₀", value=300.0, step=1.0)
-    v2_0 = st.number_input("小球2 初始速度 v2₀ (m/s)", value=-2.0, step=0.5)
-with col3:
-    e = st.number_input("碰撞恢复系数 e (0~1)", min_value=0.0, max_value=1.0, value=0.8, step=0.05)
+st.title("🎱 对心完全弹性碰撞仿真系统")
+st.markdown("### 按照碰撞速度方向分类 · 物理动态仿真")
 
-# 整体布局：上动画+下三图，右侧数据
-left_main, right_data = st.columns([2.5, 1])
+# =========== 左右布局：左侧仿真+图像，右侧参数控制面板 ===========
+col_left, col_right = st.columns([2, 1])
 
-html_code = f'''
-<!DOCTYPE html>
-<html>
-<head>
-<style>
-body {{margin:0;padding:0;font-family:sans-serif;background:#f9f9f9;}}
-/* 整体布局 */
-.top-row{{display:flex;gap:20px;padding:10px;}}
-.ani-wrap{{flex:2.5;}}
-.data-wrap{{flex:1;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;}}
-.bottom-charts{{padding:10px;display:flex;flex-direction:column;gap:15px;}}
-/* 数据面板样式，和PhET一致 */
-.data-row{{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #eee;}}
-.data-label{{color:#555;}}
-.data-value{{font-weight:bold;color:#222;}}
-.controls{{margin:10px 0;text-align:center;}}
-button{{padding:8px 20px;margin:0 8px;border:none;border-radius:6px;background:#2196F3;color:#fff;cursor:pointer;font-size:15px;}}
-canvas{{background:#fff;border:1px solid #ddd;border-radius:8px;width:100%;}}
-</style>
-</head>
-<body>
+with col_right:
+    st.subheader("⚙️ 参数设置")
+    m1 = st.slider("小球1质量 m1 (kg)", 1.0, 10.0, 2.0, 0.5)
+    m2 = st.slider("小球2质量 m2 (kg)", 1.0, 10.0, 5.0, 0.5)
+    v1 = st.slider("小球1初速度 v1 (m/s)", 1.0, 20.0, 10.0, 1.0)
+    v2 = st.slider("小球2初速度 v2 (m/s)", -10.0, 10.0, 2.0, 1.0)
 
-<!-- 上半部分：动画 + 右侧数据 -->
-<div class="top-row">
-    <div class="ani-wrap">
-        <div class="controls">
-            <button onclick="play()">播放</button>
-            <button onclick="pause()">暂停</button>
-            <button onclick="reset()">重置</button>
-        </div>
-        <canvas id="aniCanvas" height="220"></canvas>
-    </div>
+    # 完全弹性碰撞公式
+    v1_final = ((m1 - m2) * v1 + 2 * m2 * v2) / (m1 + m2)
+    v2_final = ((m2 - m1) * v2 + 2 * m1 * v1) / (m1 + m2)
 
-    <!-- 右侧逐条数据面板 -->
-    <div class="data-wrap">
-        <h4 style="margin-top:0;">实时数据面板</h4>
-        <div class="data-row">
-            <span class="data-label">小球1 质量 (kg)</span>
-            <span class="data-value" id="m1_val">{m1}</span>
-        </div>
-        <div class="data-row">
-            <span class="data-label">小球2 质量 (kg)</span>
-            <span class="data-value" id="m2_val">{m2}</span>
-        </div>
-        <div class="data-row">
-            <span class="data-label">恢复系数 e</span>
-            <span class="data-value" id="e_val">{e}</span>
-        </div>
-        <hr>
-        <div class="data-row">
-            <span class="data-label">小球1 位置 (m)</span>
-            <span class="data-value" id="x1_val">0.00</span>
-        </div>
-        <div class="data-row">
-            <span class="data-label">小球2 位置 (m)</span>
-            <span class="data-value" id="x2_val">0.00</span>
-        </div>
-        <div class="data-row">
-            <span class="data-label">小球1 速度 (m/s)</span>
-            <span class="data-value" id="v1_val">0.00</span>
-        </div>
-        <div class="data-row">
-            <span class="data-label">小球2 速度 (m/s)</span>
-            <span class="data-value" id="v2_val">0.00</span>
-        </div>
-        <hr>
-        <div class="data-row">
-            <span class="data-label">小球1 动量 (kg·m/s)</span>
-            <span class="data-value" id="p1_val">0.00</span>
-        </div>
-        <div class="data-row">
-            <span class="data-label">小球2 动量 (kg·m/s)</span>
-            <span class="data-value" id="p2_val">0.00</span>
-        </div>
-        <div class="data-row">
-            <span class="data-label">系统总动量</span>
-            <span class="data-value" id="pt_val">0.00</span>
-        </div>
-        <hr>
-        <div class="data-row">
-            <span class="data-label">小球1 动能 (J)</span>
-            <span class="data-value" id="ek1_val">0.00</span>
-        </div>
-        <div class="data-row">
-            <span class="data-label">小球2 动能 (J)</span>
-            <span class="data-value" id="ek2_val">0.00</span>
-        </div>
-        <div class="data-row">
-            <span class="data-label">系统总动能</span>
-            <span class="data-value" id="ekt_val">0.00</span>
-        </div>
-    </div>
-</div>
+    st.divider()
+    st.success("📌 碰撞后速度结果")
+    st.write(f"小球1末速度：**{v1_final:.2f} m/s**")
+    st.write(f"小球2末速度：**{v2_final:.2f} m/s**")
 
-<!-- 下半部分：三张曲线图 -->
-<div class="bottom-charts">
-    <canvas id="velCanvas" height="160"></canvas>
-    <canvas id="ekCanvas" height="160"></canvas>
-    <canvas id="momCanvas" height="160"></canvas>
-</div>
+    # 动量、动能计算
+    p1 = m1 * v1
+    p2 = m2 * v2
+    p_total = p1 + p2
 
-<script>
-// 物理参数
-const m1 = {m1};
-const m2 = {m2};
-const e  = {e};
+    Ek1 = 0.5 * m1 * v1 **2
+    Ek2 = 0.5 * m2 * v2** 2
+    Ek_total = Ek1 + Ek2
 
-let x1  = {x1_0};
-let x2  = {x2_0};
-let v1  = {v1_0};
-let v2  = {v2_0};
-const r = 26;
+    st.info("📊 初始物理量")
+    st.write(f"系统总动量：**{p_total:.2f} kg·m/s**")
+    st.write(f"系统总动能：**{Ek_total:.2f} J**")
 
-let playing = true;
-const dt = 0.05;
+# =========== 左侧：动画 + 四张带刻度物理图像 ===========
+with col_left:
+    # 1. 碰撞过程动画
+    fig_ani, ax_ani = plt.subplots(figsize=(10, 3))
+    ax_ani.set_xlim(0, 10)
+    ax_ani.set_ylim(0, 2)
+    ax_ani.set_xticks(np.arange(0, 11, 1))   # X轴刻度
+    ax_ani.set_yticks(np.arange(0, 3, 0.5))  # Y轴刻度
+    ax_ani.grid(True, alpha=0.3)
+    ax_ani.set_title("小球对心完全弹性碰撞过程", fontsize=12)
 
-// 绘图数据记录
-let t = 0;
-let tList = [];
-let v1List=[],v2List=[];
-let ek1List=[],ek2List=[],ekSumList=[];
-let p1List=[],p2List=[],pTotalList=[];
+    ball1 = Circle((2, 1), 0.3, color="#ff6b6b", label="小球1")
+    ball2 = Circle((7, 1), 0.3, color="#4ecdc4", label="小球2")
+    ax_ani.add_patch(ball1)
+    ax_ani.add_patch(ball2)
+    ax_ani.legend()
 
-// 画布DOM
-const aniCvs = document.getElementById("aniCanvas");
-const aniCtx = aniCvs.getContext("2d");
+    st.pyplot(fig_ani)
 
-const velCvs = document.getElementById("velCanvas");
-const velCtx = velCvs.getContext("2d");
+    # 2. 位置-时间图像（带刻度+网格）
+    fig1, ax1 = plt.subplots(figsize=(8, 3))
+    t = np.linspace(0, 5, 100)
+    x1 = v1 * t
+    x2 = 7 + v2 * t
+    ax1.plot(t, x1, label="小球1位置", c="#ff6b6b")
+    ax1.plot(t, x2, label="小球2位置", c="#4ecdc4")
+    ax1.set_title("位置 — 时间 图像")
+    ax1.set_xlabel("时间 t (s)")
+    ax1.set_ylabel("位置 x (m)")
+    ax1.set_xticks(np.arange(0, 6, 0.5))
+    ax1.set_yticks(np.arange(-20, 30, 5))
+    ax1.grid(True, alpha=0.3)
+    ax1.legend()
+    st.pyplot(fig1)
 
-const ekCvs = document.getElementById("ekCanvas");
-const ekCtx = ekCvs.getContext("2d");
+    # 3. 速度-时间图像
+    fig2, ax2 = plt.subplots(figsize=(8, 3))
+    v1_list = np.full_like(t, v1_final)
+    v2_list = np.full_like(t, v2_final)
+    ax2.plot(t, v1_list, label="小球1速度", c="#ff6b6b")
+    ax2.plot(t, v2_list, label="小球2速度", c="#4ecdc4")
+    ax2.set_title("速度 — 时间 图像")
+    ax2.set_xlabel("时间 t (s)")
+    ax2.set_ylabel("速度 v (m/s)")
+    ax2.set_xticks(np.arange(0, 6, 0.5))
+    ax2.set_yticks(np.arange(-10, 25, 2))
+    ax2.grid(True, alpha=0.3)
+    ax2.legend()
+    st.pyplot(fig2)
 
-const momCvs = document.getElementById("momCanvas");
-const momCtx = momCvs.getContext("2d");
+    # 4. 动量-时间图像
+    fig3, ax3 = plt.subplots(figsize=(8, 3))
+    p1_line = np.full_like(t, m1 * v1_final)
+    p2_line = np.full_like(t, m2 * v2_final)
+    ax3.plot(t, p1_line, label="小球1动量", c="#ff6b6b")
+    ax3.plot(t, p2_line, label="小球2动量", c="#4ecdc4")
+    ax3.set_title("动量 — 时间 图像")
+    ax3.set_xlabel("时间 t (s)")
+    ax3.set_ylabel("动量 p (kg·m/s)")
+    ax3.set_xticks(np.arange(0, 6, 0.5))
+    ax3.set_yticks(np.arange(-50, 60, 10))
+    ax3.grid(True, alpha=0.3)
+    ax3.legend()
+    st.pyplot(fig3)
 
-// 数据DOM
-const x1Val = document.getElementById("x1_val");
-const x2Val = document.getElementById("x2_val");
-const v1Val = document.getElementById("v1_val");
-const v2Val = document.getElementById("v2_val");
-const p1Val = document.getElementById("p1_val");
-const p2Val = document.getElementById("p2_val");
-const ptVal = document.getElementById("pt_val");
-const ek1Val = document.getElementById("ek1_val");
-const ek2Val = document.getElementById("ek2_val");
-const ektVal = document.getElementById("ekt_val");
+    # 5. 动能-时间图像
+    fig4, ax4 = plt.subplots(figsize=(8, 3))
+    ek1_line = np.full_like(t, 0.5*m1*v1_final**2)
+    ek2_line = np.full_like(t, 0.5*m2*v2_final**2)
+    ax4.plot(t, ek1_line, label="小球1动能", c="#ff6b6b")
+    ax4.plot(t, ek2_line, label="小球2动能", c="#4ecdc4")
+    ax4.set_title("动能 — 时间 图像")
+    ax4.set_xlabel("时间 t (s)")
+    ax4.set_ylabel("动能 Ek (J)")
+    ax4.set_xticks(np.arange(0, 6, 0.5))
+    ax4.set_yticks(np.arange(0, 60, 5))
+    ax4.grid(True, alpha=0.3)
+    ax4.legend()
+    st.pyplot(fig4)
 
-// 防抖刷新数据（解决闪屏）
-let lastUpdate = 0;
-function updateData(){{
-    const now = Date.now();
-    if (now - lastUpdate < 100) return; // 100ms刷新一次，不闪
-    lastUpdate = now;
+# =========== 碰撞分类说明：按速度方向划分 ===========
+st.divider()
+st.subheader("📚 碰撞两大分类体系（按速度方向划分）")
+st.markdown("""
+1. **对心碰撞（正碰）**
+- 两球速度方向在两球球心连线上
+- 碰撞后速度仍在同一直线，一维运动
 
-    let p1 = m1 * v1;
-    let p2 = m2 * v2;
-    let pt = p1 + p2;
-    let ek1 = 0.5 * m1 * v1 * v1;
-    let ek2 = 0.5 * m2 * v2 * v2;
-    let ekt = ek1 + ek2;
+2. **非对心碰撞（斜碰）**
+- 初速度不在球心连线上
+- 碰撞后速度发生偏转，二维平面运动
 
-    x1Val.innerText = x1.toFixed(2);
-    x2Val.innerText = x2.toFixed(2);
-    v1Val.innerText = v1.toFixed(2);
-    v2Val.innerText = v2.toFixed(2);
-    p1Val.innerText = p1.toFixed(2);
-    p2Val.innerText = p2.toFixed(2);
-    ptVal.innerText = pt.toFixed(2);
-    ek1Val.innerText = ek1.toFixed(2);
-    ek2Val.innerText = ek2.toFixed(2);
-    ektVal.innerText = ekt.toFixed(2);
-}}
-
-// 碰撞计算
-function collideOneDim(){{
-    if(Math.abs(x1 - x2) < 2*r){{
-        let v1New = ((m1 - e*m2)*v1 + (1+e)*m2*v2) / (m1 + m2);
-        let v2New = ((m2 - e*m1)*v2 + (1+e)*m1*v1) / (m1 + m2);
-        v1 = v1New;
-        v2 = v2New;
-    }}
-}}
-
-// 边界反弹
-function boundaryBounce(){{
-    if(x1 < r || x1 > aniCvs.width - r) v1 = -v1;
-    if(x2 < r || x2 > aniCvs.width - r) v2 = -v2;
-}}
-
-// 绘制小球
-function drawBall(){{
-    aniCtx.clearRect(0,0,aniCvs.width,aniCvs.height);
-    aniCtx.beginPath();
-    aniCtx.moveTo(0, aniCvs.height/2);
-    aniCtx.lineTo(aniCvs.width, aniCvs.height/2);
-    aniCtx.strokeStyle="#ccc";
-    aniCtx.stroke();
-    aniCtx.beginPath();
-    aniCtx.arc(x1, aniCvs.height/2, r, 0, Math.PI*2);
-    aniCtx.fillStyle="#f44336"; aniCtx.fill();
-    aniCtx.beginPath();
-    aniCtx.arc(x2, aniCvs.height/2, r, 0, Math.PI*2);
-    aniCtx.fillStyle="#2196F3"; aniCtx.fill();
-}}
-
-// 带坐标轴刻度的通用绘图函数
-function drawAxis(ctx, cvs, title, isZeroCenter=false){{
-    const w = cvs.width, h = cvs.height;
-    const ox = 40, oy = isZeroCenter ? h/2 : h-25;
-    ctx.clearRect(0,0,w,h);
-    ctx.strokeStyle="#ccc";
-    ctx.beginPath();
-    ctx.moveTo(ox,15); ctx.lineTo(ox,h-15); ctx.moveTo(ox,oy); ctx.lineTo(w-10,oy);
-    ctx.stroke();
-    ctx.fillStyle="#555";
-    ctx.fillText(title, 45, 18);
-}}
-
-// 速度-时间图
-function drawVelChart(){{
-    drawAxis(velCtx, velCvs, "速度-时间 (m/s)", true);
-    velCtx.strokeStyle="#f44336";
-    velCtx.beginPath();
-    for(let i=0;i<tList.length;i++){{
-        let px = 40 + tList[i]*8;
-        let py = velCvs.height/2 - v1List[i]*5;
-        i===0 ? velCtx.moveTo(px,py) : velCtx.lineTo(px,py);
-    }}
-    velCtx.stroke();
-
-    velCtx.strokeStyle="#2196F3";
-    velCtx.beginPath();
-    for(let i=0;i<tList.length;i++){{
-        let px = 40 + tList[i]*8;
-        let py = velCvs.height/2 - v2List[i]*5;
-        i===0 ? velCtx.moveTo(px,py) : velCtx.lineTo(px,py);
-    }}
-    velCtx.stroke();
-}}
-
-// 动能-时间图
-function drawEkChart(){{
-    drawAxis(ekCtx, ekCvs, "动能-时间 (J)", false);
-    ekCtx.strokeStyle="#f44336";
-    ekCtx.beginPath();
-    for(let i=0;i<tList.length;i++){{
-        let px = 40 + tList[i]*8;
-        let py = ekCvs.height-25 - ek1List[i]*1.5;
-        i===0 ? ekCtx.moveTo(px,py) : ekCtx.lineTo(px,py);
-    }}
-    ekCtx.stroke();
-
-    ekCtx.strokeStyle="#2196F3";
-    ekCtx.beginPath();
-    for(let i=0;i<tList.length;i++){{
-        let px = 40 + tList[i]*8;
-        let py = ekCvs.height-25 - ek2List[i]*1.5;
-        i===0 ? ekCtx.moveTo(px,py) : ekCtx.lineTo(px,py);
-    }}
-    ekCtx.stroke();
-
-    ekCtx.strokeStyle="#666";
-    ekCtx.setLineDash([4,4]);
-    ekCtx.beginPath();
-    for(let i=0;i<tList.length;i++){{
-        let px = 40 + tList[i]*8;
-        let py = ekCvs.height-25 - ekSumList[i]*1.5;
-        i===0 ? ekCtx.moveTo(px,py) : ekCtx.lineTo(px,py);
-    }}
-    ekCtx.stroke();
-    ekCtx.setLineDash([]);
-}}
-
-// 动量-时间图
-function drawMomChart(){{
-    drawAxis(momCtx, momCvs, "动量-时间 (kg·m/s)", true);
-    momCtx.strokeStyle="#f44336";
-    momCtx.beginPath();
-    for(let i=0;i<tList.length;i++){{
-        let px = 40 + tList[i]*8;
-        let py = momCvs.height/2 - p1List[i]*2.5;
-        i===0 ? momCtx.moveTo(px,py) : momCtx.lineTo(px,py);
-    }}
-    momCtx.stroke();
-
-    momCtx.strokeStyle="#2196F3";
-    momCtx.beginPath();
-    for(let i=0;i<tList.length;i++){{
-        let px = 40 + tList[i]*8;
-        let py = momCvs.height/2 - p2List[i]*2.5;
-        i===0 ? momCtx.moveTo(px,py) : momCtx.lineTo(px,py);
-    }}
-    momCtx.stroke();
-
-    momCtx.strokeStyle="#444";
-    momCtx.setLineDash([4,4]);
-    momCtx.beginPath();
-    for(let i=0;i<tList.length;i++){{
-        let px = 40 + tList[i]*8;
-        let py = momCvs.height/2 - pTotalList[i]*2.5;
-        i===0 ? momCtx.moveTo(px,py) : momCtx.lineTo(px,py);
-    }}
-    momCtx.stroke();
-    momCtx.setLineDash([]);
-}}
-
-// 主动画循环
-function update(){{
-    if(playing){{
-        x1 += v1 * dt * 2;
-        x2 += v2 * dt * 2;
-
-        collideOneDim();
-        boundaryBounce();
-
-        t += dt;
-        let p1 = m1*v1;
-        let p2 = m2*v2;
-        let pt = p1+p2;
-        let ek1 = 0.5*m1*v1*v1;
-        let ek2 = 0.5*m2*v2*v2;
-        let ekt = ek1+ek2;
-
-        tList.push(t);
-        v1List.push(v1);v2List.push(v2);
-        ek1List.push(ek1);ek2List.push(ek2);ekSumList.push(ekt);
-        p1List.push(p1);p2List.push(p2);pTotalList.push(pt);
-
-        if(tList.length>600){{
-            tList.shift();v1List.shift();v2List.shift();
-            ek1List.shift();ek2List.shift();ekSumList.shift();
-            p1List.shift();p2List.shift();pTotalList.shift();
-        }}
-
-        updateData();
-    }}
-
-    drawBall();
-    drawVelChart();
-    drawEkChart();
-    drawMomChart();
-
-    requestAnimationFrame(update);
-}}
-
-// 控制函数
-function play(){{playing=true;}}
-function pause(){{playing=false;}}
-function reset(){{
-    playing=false;
-    x1={x1_0};x2={x2_0};
-    v1={v1_0};v2={v2_0};
-    t=0;
-    tList=[];
-    v1List=[];v2List=[];
-    ek1List=[];ek2List=[];ekSumList=[];
-    p1List=[];p2List=[];pTotalList=[];
-
-    updateData();
-    drawBall();drawVelChart();drawEkChart();drawMomChart();
-}}
-
-// 初始化
-updateData();
-drawBall();drawVelChart();drawEkChart();drawMomChart();
-update();
-</script>
-</body>
-</html>
-'''
-
-with left_main:
-    st.components.v1.html(html_code, height=850)
-
-with right_data:
-    st.empty()
+> 本仿真演示：**一维 · 对心完全弹性碰撞**
+""")
