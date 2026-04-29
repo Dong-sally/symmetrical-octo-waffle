@@ -49,10 +49,11 @@ with col_cfg:
     v1_0 = st.number_input("小球1 初速度(m/s)", value=8.0, step=0.1)
     v2_0 = st.number_input("小球2 初速度(m/s)", value=1.0, step=0.1)
 
-    # 一维完全弹性碰撞公式
-       v1_end = ((m1 - m2) * v1_0 + 2 * m2 * v2_0) / (m1 + m2)
-    v2_end = ((m2 - m1) * v2_0 + 2 * m1 * v1_0) / (m1 + m2)
+# 一维完全弹性碰撞公式（这里是修正缩进的关键！）
+v1_end = ((m1 - m2) * v1_0 + 2 * m2 * v2_0) / (m1 + m2)
+v2_end = ((m2 - m1) * v2_0 + 2 * m1 * v1_0) / (m1 + m2)
 
+with col_cfg:
     st.markdown("### 碰撞后速度")
     st.write(f"球1 末速度：{v1_end:.2f} m/s")
     st.write(f"球2 末速度：{v2_end:.2f} m/s")
