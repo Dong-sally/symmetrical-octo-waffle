@@ -142,4 +142,4 @@ with col_main:
     ax_x.set_xlabel("Time (s)")
     ax_x.set_ylabel("Position (m)")
     ax_x.legend()
-    st.pyplot(fig_x).
+    st.pyplot(fig_x)
