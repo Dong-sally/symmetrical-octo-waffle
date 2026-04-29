@@ -1,16 +1,15 @@
-import streamlit as st
+ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
-import time
 
-# -------------------------- 页面配置 --------------------------
+# 页面配置
 st.set_page_config(
     page_title="1D Perfectly Elastic Collision Simulation",
     layout="wide"
 )
 
-# -------------------------- 初始化会话状态 --------------------------
+# 会话状态初始化
 if "running" not in st.session_state:
     st.session_state.running = False
 if "reset_flag" not in st.session_state:
@@ -18,11 +17,11 @@ if "reset_flag" not in st.session_state:
 if "current_step" not in st.session_state:
     st.session_state.current_step = 0
 
-# -------------------------- 标题 + 置顶控制按钮 --------------------------
+# 标题
 st.title("1D Perfectly Elastic Collision Dynamic Simulation")
 st.subheader("Collision Classification by Velocity Direction")
 
-# 按钮置顶，不改变下方图像布局
+# ========== 播放 / 暂停 / 重置 按钮 置顶 ==========
 col_play, col_pause, col_reset = st.columns(3)
 with col_play:
     btn_play = st.button("▶️ 播放", use_container_width=True)
@@ -31,7 +30,6 @@ with col_pause:
 with col_reset:
     btn_reset = st.button("🔄 重置", use_container_width=True)
 
-# 按钮逻辑
 if btn_play:
     st.session_state.running = True
 if btn_pause:
@@ -42,8 +40,9 @@ if btn_reset:
     st.session_state.current_step = 0
     st.rerun()
 
-# -------------------------- 右侧参数设置 --------------------------
+# ========== 左侧展示区  右侧参数区 ==========
 col_main, col_param = st.columns([3, 1])
+
 with col_param:
     st.header("Parameter Settings")
     m1 = st.number_input("Mass of Ball1 (kg)", min_value=0.1, value=2.0, step=0.1)
@@ -51,16 +50,15 @@ with col_param:
     v1_initial = st.number_input("Initial Velocity Ball1 (m/s)", value=10.0, step=0.1)
     v2_initial = st.number_input("Initial Velocity Ball2 (m/s)", value=1.0, step=0.1)
 
-    # 一维完全弹性碰撞公式（无缩进错误）
-    v1_final = ((m1 - m2) * v1_initial + 2 * m2 * v2_initial) / (m1 + m2)
-    v2_final = ((m2 - m1) * v2_initial + 2 * m1 * v1_initial) / (m1 + m2)
+# 碰撞公式 无缩进错误
+v1_final = ((m1 - m2) * v1_initial + 2 * m2 * v2_initial) / (m1 + m2)
+v2_final = ((m2 - m1) * v2_initial + 2 * m1 * v1_initial) / (m1 + m2)
 
-    # 碰撞结果显示
+with col_param:
     st.subheader("Post-Collision Velocity")
     st.write(f"Ball1 final: {v1_final:.2f} m/s")
     st.write(f"Ball2 final: {v2_final:.2f} m/s")
 
-    # 动量与动能守恒验证
     p_initial = m1 * v1_initial + m2 * v2_initial
     p_final = m1 * v1_final + m2 * v2_final
     ke_initial = 0.5 * m1 * v1_initial**2 + 0.5 * m2 * v2_initial**2
@@ -72,15 +70,16 @@ with col_param:
     st.write(f"Total initial energy: {ke_initial:.2f} J")
     st.write(f"Total final energy: {ke_final:.2f} J")
 
-# -------------------------- 仿真参数与数据生成 --------------------------
+# ========== 仿真基础参数 ==========
 t_total = 0.025
 dt = 0.0005
 t = np.arange(0, t_total, dt)
 t_collision = t_total * 0.5
+
 x1_start = 3.0
 x2_start = 9.0
 
-# 重置时重新生成数据
+# 重置 / 改参数 重新生成全部数据
 if st.session_state.reset_flag:
     x1 = np.zeros_like(t)
     x2 = np.zeros_like(t)
@@ -109,7 +108,6 @@ if st.session_state.reset_flag:
         ke1[i] = 0.5 * m1 * v1[i]**2
         ke2[i] = 0.5 * m2 * v2[i]**2
 
-    # 保存到会话状态
     st.session_state.x1 = x1
     st.session_state.x2 = x2
     st.session_state.v1 = v1
@@ -122,7 +120,7 @@ if st.session_state.reset_flag:
     st.session_state.current_step = 0
     st.session_state.reset_flag = False
 
-# 读取会话状态数据
+# 读取数据
 x1 = st.session_state.x1
 x2 = st.session_state.x2
 v1 = st.session_state.v1
@@ -134,9 +132,9 @@ ke2 = st.session_state.ke2
 t = st.session_state.t
 current_step = st.session_state.current_step
 
-# -------------------------- 主显示区（完全还原你原来的图像尺寸） --------------------------
+# ========== 左侧画面 完全沿用你原来尺寸 ==========
 with col_main:
-    # 1. 动态碰撞动画
+    # 动画
     st.subheader("1D Dynamic Collision Animation")
     fig_anim, ax_anim = plt.subplots(figsize=(10, 3))
     ax_anim.set_xlim(0, 12)
@@ -147,10 +145,10 @@ with col_main:
     ball2 = Circle((x2[current_step], 1.0), 0.3, color="#4ecdc4", label="Ball2")
     ax_anim.add_patch(ball1)
     ax_anim.add_patch(ball2)
-    ax_anim.legend()  # 确保图例显示
+    ax_anim.legend()
     anim_placeholder = st.pyplot(fig_anim)
 
-    # 2. 动量-时间图（还原你原来的尺寸）
+    # 动量-时间
     st.subheader("Momentum - Time")
     fig_p, ax_p = plt.subplots(figsize=(10, 3))
     ax_p.plot(t[:current_step+1], p1[:current_step+1], color="#ff4b4b", label="Ball1")
@@ -158,10 +156,10 @@ with col_main:
     ax_p.set_ylim(0, max(p1.max(), p2.max()) * 1.1)
     ax_p.set_xlabel("Time (s)")
     ax_p.set_ylabel("Momentum (kg·m/s)")
-    ax_p.legend()  # 确保图例显示
+    ax_p.legend()
     p_placeholder = st.pyplot(fig_p)
 
-    # 3. 动能-时间图（还原你原来的尺寸）
+    # 动能-时间
     st.subheader("Kinetic Energy - Time")
     fig_ke, ax_ke = plt.subplots(figsize=(10, 3))
     ax_ke.plot(t[:current_step+1], ke1[:current_step+1], color="#ff4b4b", label="Ball1")
@@ -169,59 +167,23 @@ with col_main:
     ax_ke.set_ylim(0, max(ke1.max(), ke2.max()) * 1.1)
     ax_ke.set_xlabel("Time (s)")
     ax_ke.set_ylabel("Kinetic Energy (J)")
-    ax_ke.legend()  # 确保图例显示
+    ax_ke.legend()
     ke_placeholder = st.pyplot(fig_ke)
 
-    # 4. 速度-时间图（还原你原来的尺寸）
+    # 速度-时间
     st.subheader("Velocity - Time")
     fig_v, ax_v = plt.subplots(figsize=(10, 3))
     ax_v.plot(t[:current_step+1], v1[:current_step+1], color="#ff4b4b", label="Ball1")
     ax_v.plot(t[:current_step+1], v2[:current_step+1], color="#4ecdc4", label="Ball2")
     ax_v.set_xlabel("Time (s)")
     ax_v.set_ylabel("Velocity (m/s)")
-    ax_v.legend()  # 确保图例显示
+    ax_v.legend()
     v_placeholder = st.pyplot(fig_v)
 
-    # 5. 位置-时间图（还原你原来的尺寸）
-    st.subheader("Position - Time")
-    fig_x, ax_x = plt.subplots(figsize=(10, 3))
-    ax_x.plot(t[:current_step+1], x1[:current_step+1], color="#ff4b4b", label="Ball1")
-    ax_x.plot(t[:current_step+1], x2[:current_step+1], color="#4ecdc4", label="Ball2")
-    ax_x.set_xlabel("Time (s)")
-    ax_x.set_ylabel("Position (m)")
-    ax_x.legend()  # 确保图例显示
-    x_placeholder = st.pyplot(fig_x)
-
-# -------------------------- 流畅仿真循环 --------------------------
-if st.session_state.running and current_step < len(t) - 1:
-    while st.session_state.running and current_step < len(t) - 1:
-        current_step += 1
-        st.session_state.current_step = current_step
-
-        # 更新动画位置
-        ball1.center = (x1[current_step], 1.0)
-        ball2.center = (x2[current_step], 1.0)
-        anim_placeholder.pyplot(fig_anim)
-
-        # 更新所有曲线（保留图例，不修改尺寸）
-        ax_p.clear()
-        ax_p.plot(t[:current_step+1], p1[:current_step+1], color="#ff4b4b", label="Ball1")
-        ax_p.plot(t[:current_step+1], p2[:current_step+1], color="#4ecdc4", label="Ball2")
-        ax_p.set_ylim(0, max(p1.max(), p2.max()) * 1.1)
-        ax_p.set_xlabel("Time (s)")
-        ax_p.set_ylabel("Momentum (kg·m/s)")
-        ax_p.legend()
-        p_placeholder.pyplot(fig_p)
-
-        ax_ke.clear()
-        ax_ke.plot(t[:current_step+1], ke1[:current_step+1], color="#ff4b4b", label="Ball1")
-        ax_ke.plot(t[:current_step+1], ke2[:current_step+1], color="#4ecdc4", label="Ball2")
-        ax_ke.set_ylim(0, max(ke1.max(), ke2.max()) * 1.1)
-        ax_ke.set_xlabel("Time (s)")
-        ax_ke.set_ylabel("Kinetic Energy (J)")
-        ax_ke.legend()
-        ke_placeholder.pyplot(fig_ke)
-
-        ax_v.clear()
-        ax_v.plot(t[:current_step+1], v1[:current_step+1], color="#ff4b4b", label="Ball1")
-        ax_v.plot(t[:c](https://flow.complete.link/silent)...
+# ========== 流畅步进动画 不卡顿 ==========
+if st.session_state.running:
+    if current_step < len(t) - 1:
+        st.session_state.current_step += 1
+        st.rerun()
+    else:
+        st.session_state.running = False
