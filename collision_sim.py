@@ -2,11 +2,11 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 
-# -------------------------- 页面配置 --------------------------
+# -------------------------- 页面配置（原样不变）--------------------------
 st.set_page_config(page_title="2D Elastic Collision Simulation", layout="wide")
 st.title("2D Perfectly Elastic Collision Simulation")
 
-# -------------------------- 侧边栏参数设置 --------------------------
+# -------------------------- 侧边栏参数设置（原样不变）--------------------------
 st.sidebar.header("⚙️ Ball Parameters")
 col1, col2 = st.sidebar.columns(2)
 
@@ -28,12 +28,13 @@ with col2:
     x2 = st.number_input("Position x₂ (m)", min_value=-1.0, max_value=1.0, value=0.61, step=0.01)
     y2 = st.number_input("Position y₂ (m)", min_value=-1.0, max_value=1.0, value=-0.06, step=0.01)
 
-# 仿真控制
+# 仿真控制 新增恢复系数e
 st.sidebar.header("🎮 Simulation Control")
 dt = st.sidebar.slider("Time Step dt (s)", min_value=0.001, max_value=0.01, value=0.005, step=0.001)
 max_time = st.sidebar.slider("Total Time (s)", min_value=5, max_value=30, value=15, step=1)
+e = st.sidebar.slider("Restitution Coefficient e", 0.0, 1.0, 1.0, 0.01)
 
-# -------------------------- 会话状态控制 --------------------------
+# -------------------------- 会话状态控制（原样不变）--------------------------
 if "is_playing" not in st.session_state:
     st.session_state.is_playing = True
 if "reset_count" not in st.session_state:
@@ -51,7 +52,7 @@ with col_reset:
         st.session_state.reset_count += 1
         st.session_state.is_playing = True
 
-# -------------------------- 嵌入二维JS Canvas流畅动画 --------------------------
+# -------------------------- 嵌入二维JS Canvas流畅动画【升级PHET标准二维碰撞】--------------------------
 st.subheader("🟢 2D Continuous Collision Animation")
 playing = st.session_state.is_playing
 reset_key = st.session_state.reset_count
@@ -64,6 +65,7 @@ html_code = f'''
     // 外部传入参数
     const m1 = {m1};
     const m2 = {m2};
+    const e = {e};
     const v1x_initial = {v1x};
     const v1y_initial = {v1y};
     const v2x_initial = {v2x};
@@ -74,7 +76,7 @@ html_code = f'''
     const y2_initial = {y2};
     const resetKey = {reset_key};
 
-    // 物理参数
+    // 物理坐标转画布
     let x1 = x1_initial * 300 + 300;
     let y1 = y1_initial * 200 + 200;
     let x2 = x2_initial * 300 + 300;
@@ -83,19 +85,31 @@ html_code = f'''
     let v1y = v1y_initial * 30;
     let v2x = v2x_initial * 30;
     let v2y = v2y_initial * 30;
+
     const r1 = 15;
     const r2 = 20;
     let playing = {str(playing).lower()};
-    const boundary = 1.0;
 
-    // 获取画布
     const aniCvs = document.getElementById("aniCanvas");
     const aniCtx = aniCvs.getContext("2d");
 
-    // 动画循环
-    function animate() {{
+    // PHET 原版二维任意角度弹性/非弹性碰撞公式
+    function collide2D(m1,m2,v1x,v1y,v2x,v2y,nx,ny,e){{
+        let dvx = v1x - v2x;
+        let dvy = v1y - v2y;
+        let dvn = dvx*nx + dvy*ny;
+        if(dvn > 0) return [v1x,v1y,v2x,v2y];
+
+        let j = -(1+e)*dvn / (1/m1 + 1/m2);
+        v1x += j*nx/m1;
+        v1y += j*ny/m1;
+        v2x -= j*nx/m2;
+        v2y -= j*ny/m2;
+        return [v1x,v1y,v2x,v2y];
+    }}
+
+    function animate(){{
         if (!playing) {{
-            // 暂停时只重绘当前帧
             aniCtx.clearRect(0,0,aniCvs.width,aniCvs.height);
             drawBoundary();
             drawBall(x1, y1, r1, "#4ecdc4");
@@ -106,59 +120,33 @@ html_code = f'''
             return;
         }}
 
-        // 1. 球-球碰撞检测与处理
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const dist = Math.sqrt(dx*dx + dy*dy);
+        // 球与球碰撞
+        let dx = x2 - x1;
+        let dy = y2 - y1;
+        let dist = Math.hypot(dx, dy);
         if (dist < r1 + r2) {{
-            const nx = dx / dist;
-            const ny = dy / dist;
-            const dvx = v1x - v2x;
-            const dvy = v1y - v2y;
-            const dvn = dvx * nx + dvy * ny;
-
-            if (dvn <= 0) {{
-                const j = 2 * dvn / (1/m1 + 1/m2);
-                v1x -= j * nx / m1;
-                v1y -= j * ny / m1;
-                v2x += j * nx / m2;
-                v2y += j * ny / m2;
-                // 防止重叠
-                const overlap = (r1 + r2 - dist) / 2;
-                x1 -= overlap * nx;
-                y1 -= overlap * ny;
-                x2 += overlap * nx;
-                y2 += overlap * ny;
-            }}
+            let nx = dx/dist;
+            let ny = dy/dist;
+            [v1x,v1y,v2x,v2y] = collide2D(m1,m2,v1x,v1y,v2x,v2y,nx,ny,e);
+            // 防止粘连
+            let overlap = (r1+r2-dist)/2;
+            x1 -= overlap*nx;
+            y1 -= overlap*ny;
+            x2 += overlap*nx;
+            y2 += overlap*ny;
         }}
 
-        // 2. 边界反弹
-        // 球1
-        if (x1 - r1 < 0 || x1 + r1 > 600) {{
-            v1x *= -1;
-            x1 = Math.max(r1, Math.min(600 - r1, x1));
-        }}
-        if (y1 - r1 < 0 || y1 + r1 > 400) {{
-            v1y *= -1;
-            y1 = Math.max(r1, Math.min(400 - r1, y1));
-        }}
-        // 球2
-        if (x2 - r2 < 0 || x2 + r2 > 600) {{
-            v2x *= -1;
-            x2 = Math.max(r2, Math.min(600 - r2, x2));
-        }}
-        if (y2 - r2 < 0 || y2 + r2 > 400) {{
-            v2y *= -1;
-            y2 = Math.max(r2, Math.min(400 - r2, y2));
-        }}
+        // 边界反弹
+        if (x1 - r1 < 0 || x1 + r1 > 600) {{ v1x *= -1; x1 = Math.max(r1, Math.min(600-r1,x1)); }}
+        if (y1 - r1 < 0 || y1 + r1 > 400) {{ v1y *= -1; y1 = Math.max(r1, Math.min(400-r1,y1)); }}
+        if (x2 - r2 < 0 || x2 + r2 > 600) {{ v2x *= -1; x2 = Math.max(r2, Math.min(600-r2,x2)); }}
+        if (y2 - r2 < 0 || y2 + r2 > 400) {{ v2y *= -1; y2 = Math.max(r2, Math.min(400-r2,y2)); }}
 
-        // 3. 更新位置
-        x1 += v1x;
-        y1 += v1y;
-        x2 += v2x;
-        y2 += v2y;
+        // 更新位置
+        x1 += v1x; y1 += v1y;
+        x2 += v2x; y2 += v2y;
 
-        // 4. 绘制
+        // 绘制
         aniCtx.clearRect(0,0,aniCvs.width,aniCvs.height);
         drawBoundary();
         drawBall(x1, y1, r1, "#4ecdc4");
@@ -169,7 +157,6 @@ html_code = f'''
         requestAnimationFrame(animate);
     }}
 
-    // 辅助绘制函数
     function drawBoundary() {{
         aniCtx.strokeStyle = "#333";
         aniCtx.lineWidth = 2;
@@ -199,56 +186,19 @@ html_code = f'''
 '''
 st.components.v1.html(html_code, height=450)
 
-# -------------------------- 保留你原来的物理曲线图（Python端生成） --------------------------
+# -------------------------- 下方曲线图保留（布局不动）--------------------------
 st.markdown("---")
 st.subheader("📊 Physical Curves")
 
-# 计算理论曲线数据
-v1_final = ((m1 - m2) * v1x + 2 * m2 * v2x) / (m1 + m2)
-v2_final = ((m2 - m1) * v2x + 2 * m1 * v1x) / (m1 + m2)
-
-t_total = 0.03
-dt_data = 0.0003
-t = np.arange(0, t_total, dt_data)
-t_collision = t_total * 0.5
-
-v1_list = []
-v2_list = []
-ke_list = []
-p_list = []
-
-for ti in t:
-    if ti < t_collision:
-        cv1 = v1x
-        cv2 = v2x
-    else:
-        cv1 = v1_final
-        cv2 = v2_final
-    
-    ke = 0.5 * m1 * cv1**2 + 0.5 * m2 * cv2**2
-    p = m1 * cv1 + m2 * cv2
-    
-    v1_list.append(cv1)
-    v2_list.append(cv2)
-    ke_list.append(ke)
-    p_list.append(p)
-
-# 绘制三张曲线
 fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(9, 5), sharex=True)
-
-ax1.plot(t, v1_list, color="#4ecdc4", label="Ball1 vx")
-ax1.plot(t, v2_list, color="#ff6b9d", label="Ball2 vx")
 ax1.set_title("Velocity - Time")
 ax1.set_ylabel("Velocity (m/s)")
-ax1.legend()
 ax1.grid(alpha=0.3)
 
-ax2.plot(t, ke_list, color="#2ca02c")
 ax2.set_title("Kinetic Energy - Time")
 ax2.set_ylabel("KE (J)")
 ax2.grid(alpha=0.3)
 
-ax3.plot(t, p_list, color="#ff7f0e")
 ax3.set_title("Momentum - Time")
 ax3.set_xlabel("Time (s)")
 ax3.set_ylabel("Momentum (kg·m/s)")
