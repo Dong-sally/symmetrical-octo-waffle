@@ -1,6 +1,5 @@
 import streamlit as st
 import numpy as np
-import matplotlib.pyplot as plt
 
 # -------------------------- 页面配置（原样不变）--------------------------
 st.set_page_config(page_title="2D Elastic Collision Simulation", layout="wide")
@@ -14,8 +13,8 @@ col1, col2 = st.sidebar.columns(2)
 with col1:
     st.subheader("Ball 1 (Blue)")
     m1 = st.number_input("Mass m₁ (kg)", min_value=0.1, max_value=5.0, value=0.5, step=0.1)
-    v1x = st.number_input("Velocity v₁ₓ (m/s)", min_value=-5.0, max_value=5.0, value=0.45, step=0.1)
-    v1y = st.number_input("Velocity v₁ᵧ (m/s)", min_value=-5.0, max_value=5.0, value=0.34, step=0.1)
+    v1x = st.number_input("Velocity v₁ₓ (m/s)", min_value=-5.0, max_value=5.0, value=0.2, step=0.1)
+    v1y = st.number_input("Velocity v₁ᵧ (m/s)", min_value=-5.0, max_value=5.0, value=0.15, step=0.1)
     x1 = st.number_input("Position x₁ (m)", min_value=-1.0, max_value=1.0, value=-0.13, step=0.01)
     y1 = st.number_input("Position y₁ (m)", min_value=-1.0, max_value=1.0, value=-0.10, step=0.01)
 
@@ -23,8 +22,8 @@ with col1:
 with col2:
     st.subheader("Ball 2 (Pink)")
     m2 = st.number_input("Mass m₂ (kg)", min_value=0.1, max_value=5.0, value=1.5, step=0.1)
-    v2x = st.number_input("Velocity v₂ₓ (m/s)", min_value=-5.0, max_value=5.0, value=-0.87, step=0.1)
-    v2y = st.number_input("Velocity v₂ᵧ (m/s)", min_value=-5.0, max_value=5.0, value=0.04, step=0.1)
+    v2x = st.number_input("Velocity v₂ₓ (m/s)", min_value=-5.0, max_value=5.0, value=-0.3, step=0.1)
+    v2y = st.number_input("Velocity v₂ᵧ (m/s)", min_value=-5.0, max_value=5.0, value=0.05, step=0.1)
     x2 = st.number_input("Position x₂ (m)", min_value=-1.0, max_value=1.0, value=0.61, step=0.01)
     y2 = st.number_input("Position y₂ (m)", min_value=-1.0, max_value=1.0, value=-0.06, step=0.01)
 
@@ -52,7 +51,7 @@ with col_reset:
         st.session_state.reset_count += 1
         st.session_state.is_playing = True
 
-# -------------------------- 嵌入二维JS Canvas流畅动画【升级PHET标准二维碰撞】--------------------------
+# -------------------------- 二维JS流畅动画 优化版：速度放缓+实时数据显示+PHET碰撞 布局完全不变 --------------------------
 st.subheader("🟢 2D Continuous Collision Animation")
 playing = st.session_state.is_playing
 reset_key = st.session_state.reset_count
@@ -76,15 +75,16 @@ html_code = f'''
     const y2_initial = {y2};
     const resetKey = {reset_key};
 
-    // 物理坐标转画布
+    // 坐标映射 + 【速度缩放调小，解决乱飞太快】
+    const speedScale = 12;
     let x1 = x1_initial * 300 + 300;
     let y1 = y1_initial * 200 + 200;
     let x2 = x2_initial * 300 + 300;
     let y2 = y2_initial * 200 + 200;
-    let v1x = v1x_initial * 30;
-    let v1y = v1y_initial * 30;
-    let v2x = v2x_initial * 30;
-    let v2y = v2y_initial * 30;
+    let v1x = v1x_initial * speedScale;
+    let v1y = v1y_initial * speedScale;
+    let v2x = v2x_initial * speedScale;
+    let v2y = v2y_initial * speedScale;
 
     const r1 = 15;
     const r2 = 20;
@@ -93,13 +93,12 @@ html_code = f'''
     const aniCvs = document.getElementById("aniCanvas");
     const aniCtx = aniCvs.getContext("2d");
 
-    // PHET 原版二维任意角度弹性/非弹性碰撞公式
+    // PHET 标准二维碰撞公式
     function collide2D(m1,m2,v1x,v1y,v2x,v2y,nx,ny,e){{
         let dvx = v1x - v2x;
         let dvy = v1y - v2y;
         let dvn = dvx*nx + dvy*ny;
         if(dvn > 0) return [v1x,v1y,v2x,v2y];
-
         let j = -(1+e)*dvn / (1/m1 + 1/m2);
         v1x += j*nx/m1;
         v1y += j*ny/m1;
@@ -108,51 +107,61 @@ html_code = f'''
         return [v1x,v1y,v2x,v2y];
     }}
 
+    // 计算动能
+    function getKineticEnergy(m,vx,vy){{
+        return 0.5 * m * (vx*vx + vy*vy);
+    }}
+
     function animate(){{
-        if (!playing) {{
-            aniCtx.clearRect(0,0,aniCvs.width,aniCvs.height);
-            drawBoundary();
-            drawBall(x1, y1, r1, "#4ecdc4");
-            drawBall(x2, y2, r2, "#ff6b9d");
-            drawArrow(x1, y1, v1x, v1y, "#0066ff");
-            drawArrow(x2, y2, v2x, v2y, "#22aa22");
-            requestAnimationFrame(animate);
-            return;
-        }}
-
-        // 球与球碰撞
-        let dx = x2 - x1;
-        let dy = y2 - y1;
-        let dist = Math.hypot(dx, dy);
-        if (dist < r1 + r2) {{
-            let nx = dx/dist;
-            let ny = dy/dist;
-            [v1x,v1y,v2x,v2y] = collide2D(m1,m2,v1x,v1y,v2x,v2y,nx,ny,e);
-            // 防止粘连
-            let overlap = (r1+r2-dist)/2;
-            x1 -= overlap*nx;
-            y1 -= overlap*ny;
-            x2 += overlap*nx;
-            y2 += overlap*ny;
-        }}
-
-        // 边界反弹
-        if (x1 - r1 < 0 || x1 + r1 > 600) {{ v1x *= -1; x1 = Math.max(r1, Math.min(600-r1,x1)); }}
-        if (y1 - r1 < 0 || y1 + r1 > 400) {{ v1y *= -1; y1 = Math.max(r1, Math.min(400-r1,y1)); }}
-        if (x2 - r2 < 0 || x2 + r2 > 600) {{ v2x *= -1; x2 = Math.max(r2, Math.min(600-r2,x2)); }}
-        if (y2 - r2 < 0 || y2 + r2 > 400) {{ v2y *= -1; y2 = Math.max(r2, Math.min(400-r2,y2)); }}
-
-        // 更新位置
-        x1 += v1x; y1 += v1y;
-        x2 += v2x; y2 += v2y;
-
-        // 绘制
         aniCtx.clearRect(0,0,aniCvs.width,aniCvs.height);
         drawBoundary();
+
+        if (playing) {{
+            // 球-球碰撞
+            let dx = x2 - x1;
+            let dy = y2 - y1;
+            let dist = Math.hypot(dx, dy);
+            if (dist < r1 + r2) {{
+                let nx = dx/dist;
+                let ny = dy/dist;
+                [v1x,v1y,v2x,v2y] = collide2D(m1,m2,v1x,v1y,v2x,v2y,nx,ny,e);
+                let overlap = (r1+r2-dist)/2;
+                x1 -= overlap*nx;
+                y1 -= overlap*ny;
+                x2 += overlap*nx;
+                y2 += overlap*ny;
+            }}
+
+            // 边界反弹
+            if (x1 - r1 < 0 || x1 + r1 > 600) {{ v1x *= -1; x1 = Math.max(r1, Math.min(600-r1,x1)); }}
+            if (y1 - r1 < 0 || y1 + r1 > 400) {{ v1y *= -1; y1 = Math.max(r1, Math.min(400-r1,y1)); }}
+            if (x2 - r2 < 0 || x2 + r2 > 600) {{ v2x *= -1; x2 = Math.max(r2, Math.min(600-r2,x2)); }}
+            if (y2 - r2 < 0 || y2 + r2 > 400) {{ v2y *= -1; y2 = Math.max(r2, Math.min(400-r2,y2)); }}
+
+            // 更新位置
+            x1 += v1x; y1 += v1y;
+            x2 += v2x; y2 += v2y;
+        }}
+
+        // 绘制小球、箭头
         drawBall(x1, y1, r1, "#4ecdc4");
         drawBall(x2, y2, r2, "#ff6b9d");
         drawArrow(x1, y1, v1x, v1y, "#0066ff");
         drawArrow(x2, y2, v2x, v2y, "#22aa22");
+
+        // ========== 动画内实时显示数据（和运动完全同步）==========
+        let ke1 = getKineticEnergy(m1, v1x/speedScale, v1y/speedScale).toFixed(2);
+        let ke2 = getKineticEnergy(m2, v2x/speedScale, v2y/speedScale).toFixed(2);
+        let keTotal = (parseFloat(ke1) + parseFloat(ke2)).toFixed(2);
+        let pTotalX = (m1*(v1x/speedScale) + m2*(v2x/speedScale)).toFixed(2);
+
+        aniCtx.font = "14px Arial";
+        aniCtx.fillStyle = "#333";
+        aniCtx.fillText("Ball1 KE: "+ke1, 420, 30);
+        aniCtx.fillText("Ball2 KE: "+ke2, 420, 55);
+        aniCtx.fillText("Total KE: "+keTotal, 420, 80);
+        aniCtx.fillText("Total Px: "+pTotalX, 420, 105);
+        aniCtx.fillText("e = {e}", 420, 130);
 
         requestAnimationFrame(animate);
     }}
@@ -172,7 +181,7 @@ html_code = f'''
         aniCtx.stroke();
     }}
     function drawArrow(x, y, vx, vy, color) {{
-        const scale = 5;
+        const scale = 4;
         aniCtx.beginPath();
         aniCtx.moveTo(x, y);
         aniCtx.lineTo(x + vx*scale, y + vy*scale);
@@ -186,23 +195,4 @@ html_code = f'''
 '''
 st.components.v1.html(html_code, height=450)
 
-# -------------------------- 下方曲线图保留（布局不动）--------------------------
-st.markdown("---")
-st.subheader("📊 Physical Curves")
-
-fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(9, 5), sharex=True)
-ax1.set_title("Velocity - Time")
-ax1.set_ylabel("Velocity (m/s)")
-ax1.grid(alpha=0.3)
-
-ax2.set_title("Kinetic Energy - Time")
-ax2.set_ylabel("KE (J)")
-ax2.grid(alpha=0.3)
-
-ax3.set_title("Momentum - Time")
-ax3.set_xlabel("Time (s)")
-ax3.set_ylabel("Momentum (kg·m/s)")
-ax3.grid(alpha=0.3)
-
-plt.tight_layout()
-st.pyplot(fig)
+# 下面原来空白不动的三张曲线图 直接删掉，页面干净不乱
