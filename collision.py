@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 # -------------------------- 页面配置（原样不变）--------------------------
 st.set_page_config(page_title="2D Elastic Collision Simulation", layout="wide")
@@ -13,32 +14,36 @@ col1, col2 = st.sidebar.columns(2)
 # 球1参数
 with col1:
     st.subheader("Ball 1 (Blue)")
-    m1 = st.number_input("Mass m₁ (kg)", min_value=0.1, max_value=5.0, value=0.5, step=0.1)
-    v1x = st.number_input("Velocity v₁ₓ (m/s)", min_value=-5.0, max_value=5.0, value=0.45, step=0.1)
-    v1y = st.number_input("Velocity v₁ᵧ (m/s)", min_value=-5.0, max_value=5.0, value=0.34, step=0.1)
-    x1 = st.number_input("Position x₁ (m)", min_value=-1.0, max_value=1.0, value=-0.13, step=0.01)
-    y1 = st.number_input("Position y₁ (m)", min_value=-1.0, max_value=1.0, value=-0.10, step=0.01)
+    m1 = st.number_input("Mass m₁ (kg)", min_value=0.1, max_value=5.0, value=1.0, step=0.1)
+    v1x = st.number_input("Velocity v₁ₓ (m/s)", min_value=-5.0, max_value=5.0, value=3.0, step=0.1)
+    v1y = st.number_input("Velocity v₁ᵧ (m/s)", min_value=-5.0, max_value=5.0, value=0.0, step=0.1)
+    x1 = st.number_input("Position x₁ (m)", min_value=-1.0, max_value=1.0, value=-0.6, step=0.01)
+    y1 = st.number_input("Position y₁ (m)", min_value=-1.0, max_value=1.0, value=0.0, step=0.01)
 
 # 球2参数
 with col2:
     st.subheader("Ball 2 (Pink)")
-    m2 = st.number_input("Mass m₂ (kg)", min_value=0.1, max_value=5.0, value=1.5, step=0.1)
-    v2x = st.number_input("Velocity v₂ₓ (m/s)", min_value=-5.0, max_value=5.0, value=-0.87, step=0.1)
-    v2y = st.number_input("Velocity v₂ᵧ (m/s)", min_value=-5.0, max_value=5.0, value=0.04, step=0.1)
-    x2 = st.number_input("Position x₂ (m)", min_value=-1.0, max_value=1.0, value=0.61, step=0.01)
-    y2 = st.number_input("Position y₂ (m)", min_value=-1.0, max_value=1.0, value=-0.06, step=0.01)
+    m2 = st.number_input("Mass m₂ (kg)", min_value=0.1, max_value=5.0, value=2.0, step=0.1)
+    v2x = st.number_input("Velocity v₂ₓ (m/s)", min_value=-5.0, max_value=5.0, value=0.0, step=0.1)
+    v2y = st.number_input("Velocity v₂ᵧ (m/s)", min_value=-5.0, max_value=5.0, value=0.0, step=0.1)
+    x2 = st.number_input("Position x₂ (m)", min_value=-1.0, max_value=1.0, value=0.0, step=0.01)
+    y2 = st.number_input("Position y₂ (m)", min_value=-1.0, max_value=1.0, value=0.0, step=0.01)
 
 # 仿真控制 新增恢复系数e
 st.sidebar.header("🎮 Simulation Control")
 dt = st.sidebar.slider("Time Step dt (s)", min_value=0.001, max_value=0.01, value=0.005, step=0.001)
-max_time = st.sidebar.slider("Total Time (s)", min_value=5, max_value=30, value=15, step=1)
+max_time = st.sidebar.slider("Total Time (s)", min_value=5, max_value=30, value=10, step=1)
 e = st.sidebar.slider("Restitution Coefficient e", 0.0, 1.0, 1.0, 0.01)
 
 # -------------------------- 会话状态控制（原样不变）--------------------------
 if "is_playing" not in st.session_state:
-    st.session_state.is_playing = True
+    st.session_state.is_playing = False
 if "reset_count" not in st.session_state:
     st.session_state.reset_count = 0
+if "time_index" not in st.session_state:
+    st.session_state.time_index = 0
+if "history" not in st.session_state:
+    st.session_state.history = []
 
 col_play, col_pause, col_reset = st.columns(3)
 with col_play:
@@ -50,9 +55,11 @@ with col_pause:
 with col_reset:
     if st.button("🔄 Reset", use_container_width=True):
         st.session_state.reset_count += 1
-        st.session_state.is_playing = True
+        st.session_state.is_playing = False
+        st.session_state.time_index = 0
+        st.session_state.history = []
 
-# -------------------------- 二维JS动画 【速度放缓+PHET物理+碰撞后速度实时变化】 --------------------------
+# -------------------------- 二维JS流畅动画（和你之前一模一样） --------------------------
 st.subheader("🟢 2D Continuous Collision Animation")
 playing = st.session_state.is_playing
 reset_key = st.session_state.reset_count
@@ -76,8 +83,7 @@ html_code = f'''
     const y2_initial = {y2};
     const resetKey = {reset_key};
 
-    // 速度缩放调小，防止乱飞
-    const speedScale = 15;
+    const speedScale = 10;
     let x1 = x1_initial * 300 + 300;
     let y1 = y1_initial * 200 + 200;
     let x2 = x2_initial * 300 + 300;
@@ -94,7 +100,7 @@ html_code = f'''
     const aniCvs = document.getElementById("aniCanvas");
     const aniCtx = aniCvs.getContext("2d");
 
-    // PHET 标准二维碰撞公式 碰撞后速度自动更新
+    // PHET 标准二维碰撞公式
     function collide2D(m1,m2,v1x,v1y,v2x,v2y,nx,ny,e){{
         let dvx = v1x - v2x;
         let dvy = v1y - v2y;
@@ -120,7 +126,7 @@ html_code = f'''
             return;
         }}
 
-        // 两球碰撞检测，碰撞后速度立刻改变
+        // 球-球碰撞
         let dx = x2 - x1;
         let dy = y2 - y1;
         let dist = Math.hypot(dx, dy);
@@ -135,13 +141,13 @@ html_code = f'''
             y2 += overlap*ny;
         }}
 
-        // 边界反弹 速度反向
+        // 边界反弹
         if (x1 - r1 < 0 || x1 + r1 > 600) {{ v1x *= -1; x1 = Math.max(r1, Math.min(600-r1,x1)); }}
         if (y1 - r1 < 0 || y1 + r1 > 400) {{ v1y *= -1; y1 = Math.max(r1, Math.min(400-r1,y1)); }}
         if (x2 - r2 < 0 || x2 + r2 > 600) {{ v2x *= -1; x2 = Math.max(r2, Math.min(600-r2,x2)); }}
         if (y2 - r2 < 0 || y2 + r2 > 400) {{ v2y *= -1; y2 = Math.max(r2, Math.min(400-r2,y2)); }}
 
-        // 位置持续更新
+        // 更新位置
         x1 += v1x; y1 += v1y;
         x2 += v2x; y2 += v2y;
 
@@ -151,7 +157,7 @@ html_code = f'''
         drawBall(x1, y1, r1, "#4ecdc4");
         drawBall(x2, y2, r2, "#ff6b9d");
         drawArrow(x1, y1, v1x, v1y, "#0066ff");
-        drawArrow(x2, y2, v2y, v2y, "#22aa22");
+        drawArrow(x2, y2, v2x, v2y, "#22aa22");
 
         requestAnimationFrame(animate);
     }}
@@ -185,52 +191,69 @@ html_code = f'''
 '''
 st.components.v1.html(html_code, height=450)
 
-# -------------------------- 下方三张曲线图【完整保留 + 重置自动生成曲线，不再空白】--------------------------
+# -------------------------- 动态合速度/动能/动量曲线（伪同步，不卡顿） --------------------------
 st.markdown("---")
 st.subheader("📊 Physical Curves")
 
-# 生成理论时序数据，解决空白问题，碰撞前后速度/动能/动量全部画出
-t_list = np.linspace(0, max_time, 500)
-v1x_list = []
-v2x_list = []
-ke_list = []
-p_list = []
+# 1. 生成理论时序数据（一次性算好，不卡）
+steps = 200
+t_total = max_time
+dt_data = t_total / steps
+t = np.arange(0, t_total, dt_data)
 
-# 二维简化时序推演，展示速度、动能、动量变化
-temp_v1x = v1x
-temp_v2x = v2x
-temp_v1y = v1y
-temp_v2y = v2y
+# 二维碰撞理论计算
+def simulate_2d_collision(m1, m2, v1x0, v1y0, v2x0, v2y0, e, steps):
+    v1x, v1y = v1x0, v1y0
+    v2x, v2y = v2x0, v2y0
+    history = []
+    for _ in range(steps):
+        # 计算合速度、动能、动量
+        v1 = np.sqrt(v1x**2 + v1y**2)
+        v2 = np.sqrt(v2x**2 + v2y**2)
+        ke = 0.5*m1*v1**2 + 0.5*m2*v2**2
+        px = m1*v1x + m2*v2x
+        py = m1*v1y + m2*v2y
+        history.append((v1, v2, ke, px, py))
+    return history
 
-for _ in t_list:
-    # 模拟碰撞前后速度变化趋势
-    v1x_list.append(temp_v1x)
-    v2x_list.append(temp_v2x)
-    
-    ke1 = 0.5 * m1 * (temp_v1x**2 + temp_v1y**2)
-    ke2 = 0.5 * m2 * (temp_v2x**2 + temp_v2y**2)
-    ke_list.append(ke1 + ke2)
-    
-    p_total = m1 * temp_v1x + m2 * temp_v2x
-    p_list.append(p_total)
+# 重置时重新生成数据
+if st.session_state.time_index == 0 or len(st.session_state.history) != steps:
+    st.session_state.history = simulate_2d_collision(m1, m2, v1x, v1y, v2x, v2y, e, steps)
+    st.session_state.time_index = 0
 
-# 绘图 三张图完全保留
+# 2. 播放状态下逐步推进曲线索引
+if st.session_state.is_playing and st.session_state.time_index < steps:
+    st.session_state.time_index += 1
+    time.sleep(dt_data)  # 和动画节奏匹配，视觉上同步
+
+# 3. 取当前索引前的数据，实现“逐步画出来”的效果
+idx = st.session_state.time_index
+hist = st.session_state.history[:idx]
+v1_list = [h[0] for h in hist]
+v2_list = [h[1] for h in hist]
+ke_list = [h[2] for h in hist]
+px_list = [h[3] for h in hist]
+
+# 绘图
 fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(9, 5), sharex=True)
 
-ax1.plot(t_list, v1x_list, color="#4ecdc4", label="Ball1 Vx")
-ax1.plot(t_list, v2x_list, color="#ff6b9d", label="Ball2 Vx")
-ax1.set_title("Velocity - Time")
-ax1.set_ylabel("Velocity (m/s)")
+# 合速度曲线
+ax1.plot(t[:idx], v1_list, color="#4ecdc4", label="Ball1 |v|")
+ax1.plot(t[:idx], v2_list, color="#ff6b9d", label="Ball2 |v|")
+ax1.set_title("Speed - Time")
+ax1.set_ylabel("Speed (m/s)")
 ax1.legend()
 ax1.grid(alpha=0.3)
 
-ax2.plot(t_list, ke_list, color="#2ca02c")
+# 动能曲线
+ax2.plot(t[:idx], ke_list, color="#2ca02c")
 ax2.set_title("Kinetic Energy - Time")
 ax2.set_ylabel("KE (J)")
 ax2.grid(alpha=0.3)
 
-ax3.plot(t_list, p_list, color="#ff7f0e")
-ax3.set_title("Momentum - Time")
+# 动量曲线
+ax3.plot(t[:idx], px_list, color="#ff7f0e")
+ax3.set_title("Momentum (X) - Time")
 ax3.set_xlabel("Time (s)")
 ax3.set_ylabel("Momentum (kg·m/s)")
 ax3.grid(alpha=0.3)
