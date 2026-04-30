@@ -1,8 +1,6 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle
-import time
 
 # -------------------------- 页面配置 --------------------------
 st.set_page_config(page_title="2D Elastic Collision Simulation", layout="wide")
@@ -35,225 +33,226 @@ st.sidebar.header("🎮 Simulation Control")
 dt = st.sidebar.slider("Time Step dt (s)", min_value=0.001, max_value=0.01, value=0.005, step=0.001)
 max_time = st.sidebar.slider("Total Time (s)", min_value=5, max_value=30, value=15, step=1)
 
-# -------------------------- 物理仿真核心类 --------------------------
-class CollisionSimulation:
-    def __init__(self, m1, m2, x1, y1, v1x, v1y, x2, y2, v2x, v2y, dt):
-        self.m1 = m1
-        self.m2 = m2
-        self.x1 = x1
-        self.y1 = y1
-        self.v1x = v1x
-        self.v1y = v1y
-        self.x2 = x2
-        self.y2 = y2
-        self.v2x = v2x
-        self.v2y = v2y
-        self.dt = dt
+# -------------------------- 会话状态控制 --------------------------
+if "is_playing" not in st.session_state:
+    st.session_state.is_playing = True
+if "reset_count" not in st.session_state:
+    st.session_state.reset_count = 0
 
-        # 记录历史数据
-        self.time_history = []
-        self.v1x_history = []
-        self.v1y_history = []
-        self.v2x_history = []
-        self.v2y_history = []
-        self.ke_history = []
-        self.px_history = []
-        self.py_history = []
-
-        # 边界参数
-        self.boundary = 1.0
-        self.r1 = 0.05
-        self.r2 = 0.08
-
-    def update(self):
-        # 检测球-球碰撞
-        dx = self.x2 - self.x1
-        dy = self.y2 - self.y1
-        dist = np.sqrt(dx**2 + dy**2)
-        if dist < self.r1 + self.r2:
-            # 二维完全弹性碰撞
-            nx = dx / dist
-            ny = dy / dist
-
-            # 相对速度
-            dvx = self.v1x - self.v2x
-            dvy = self.v1y - self.v2y
-            dvn = dvx * nx + dvy * ny
-
-            # 如果物体正在远离，不处理碰撞
-            if dvn > 0:
-                pass
-            else:
-                # 冲量计算
-                j = 2 * dvn / (1/self.m1 + 1/self.m2)
-                self.v1x -= j * nx / self.m1
-                self.v1y -= j * ny / self.m1
-                self.v2x += j * nx / self.m2
-                self.v2y += j * ny / self.m2
-
-        # 边界碰撞检测（反弹）
-        # 球1
-        if self.x1 - self.r1 < -self.boundary or self.x1 + self.r1 > self.boundary:
-            self.v1x *= -1
-            self.x1 = np.clip(self.x1, -self.boundary + self.r1, self.boundary - self.r1)
-        if self.y1 - self.r1 < -self.boundary or self.y1 + self.r1 > self.boundary:
-            self.v1y *= -1
-            self.y1 = np.clip(self.y1, -self.boundary + self.r1, self.boundary - self.r1)
-
-        # 球2
-        if self.x2 - self.r2 < -self.boundary or self.x2 + self.r2 > self.boundary:
-            self.v2x *= -1
-            self.x2 = np.clip(self.x2, -self.boundary + self.r2, self.boundary - self.r2)
-        if self.y2 - self.r2 < -self.boundary or self.y2 + self.r2 > self.boundary:
-            self.v2y *= -1
-            self.y2 = np.clip(self.y2, -self.boundary + self.r2, self.boundary - self.r2)
-
-        # 更新位置
-        self.x1 += self.v1x * self.dt
-        self.y1 += self.v1y * self.dt
-        self.x2 += self.v2x * self.dt
-        self.y2 += self.v2y * self.dt
-
-        # 记录数据
-        self.time_history.append(len(self.time_history) * self.dt)
-        self.v1x_history.append(self.v1x)
-        self.v1y_history.append(self.v1y)
-        self.v2x_history.append(self.v2x)
-        self.v2y_history.append(self.v2y)
-
-        # 动能
-        ke1 = 0.5 * self.m1 * (self.v1x**2 + self.v1y**2)
-        ke2 = 0.5 * self.m2 * (self.v2x**2 + self.v2y**2)
-        self.ke_history.append(ke1 + ke2)
-
-        # 动量
-        px = self.m1 * self.v1x + self.m2 * self.v2x
-        py = self.m1 * self.v1y + self.m2 * self.v2y
-        self.px_history.append(px)
-        self.py_history.append(py)
-
-# -------------------------- 初始化仿真 --------------------------
-if 'sim' not in st.session_state:
-    st.session_state.sim = CollisionSimulation(m1, m2, x1, y1, v1x, v1y, x2, y2, v2x, v2y, dt)
-    st.session_state.running = False
-sim = st.session_state.sim
-
-# -------------------------- 控制按钮 --------------------------
 col_play, col_pause, col_reset = st.columns(3)
 with col_play:
     if st.button("▶️ Play", use_container_width=True):
-        st.session_state.running = True
+        st.session_state.is_playing = True
 with col_pause:
     if st.button("⏸️ Pause", use_container_width=True):
-        st.session_state.running = False
+        st.session_state.is_playing = False
 with col_reset:
     if st.button("🔄 Reset", use_container_width=True):
-        st.session_state.sim = CollisionSimulation(m1, m2, x1, y1, v1x, v1y, x2, y2, v2x, v2y, dt)
-        sim = st.session_state.sim
-        st.session_state.running = False
+        st.session_state.reset_count += 1
+        st.session_state.is_playing = True
 
-# -------------------------- 主显示区域 --------------------------
-col_main, col_plots = st.columns([1, 1.2])
+# -------------------------- 嵌入二维JS Canvas流畅动画 --------------------------
+st.subheader("🟢 2D Continuous Collision Animation")
+playing = st.session_state.is_playing
+reset_key = st.session_state.reset_count
 
-with col_main:
-    st.subheader("🟢 2D Collision Scene")
-    fig_scene, ax_scene = plt.subplots(figsize=(5, 5))
-    ax_scene.set_xlim(-1.1, 1.1)
-    ax_scene.set_ylim(-1.1, 1.1)
-    ax_scene.set_aspect('equal')
-    ax_scene.set_title("2D Continuous Collision", fontsize=12)
-    ax_scene.set_xlabel("x (m)")
-    ax_scene.set_ylabel("y (m)")
-    ax_scene.grid(True, alpha=0.3)
+html_code = f'''
+<div style="display:flex;justify-content:center;">
+    <canvas id="aniCanvas" width="600" height="400" style="border:1px solid #eee;"></canvas>
+</div>
+<script>
+    // 外部传入参数
+    const m1 = {m1};
+    const m2 = {m2};
+    const v1x_initial = {v1x};
+    const v1y_initial = {v1y};
+    const v2x_initial = {v2x};
+    const v2y_initial = {v2y};
+    const x1_initial = {x1};
+    const y1_initial = {y1};
+    const x2_initial = {x2};
+    const y2_initial = {y2};
+    const resetKey = {reset_key};
 
-    # 绘制边界
-    ax_scene.plot([-1, 1, 1, -1, -1], [-1, -1, 1, 1, -1], 'k-', linewidth=2)
+    // 物理参数
+    let x1 = x1_initial * 300 + 300;
+    let y1 = y1_initial * 200 + 200;
+    let x2 = x2_initial * 300 + 300;
+    let y2 = y2_initial * 200 + 200;
+    let v1x = v1x_initial * 30;
+    let v1y = v1y_initial * 30;
+    let v2x = v2x_initial * 30;
+    let v2y = v2y_initial * 30;
+    const r1 = 15;
+    const r2 = 20;
+    let playing = {str(playing).lower()};
+    const boundary = 1.0;
 
-    # 初始绘制球
-    circle1 = Circle((sim.x1, sim.y1), sim.r1, color='cyan', alpha=0.7, label=f"m1={sim.m1}kg")
-    circle2 = Circle((sim.x2, sim.y2), sim.r2, color='magenta', alpha=0.7, label=f"m2={sim.m2}kg")
-    ax_scene.add_patch(circle1)
-    ax_scene.add_patch(circle2)
-    ax_scene.legend()
+    // 获取画布
+    const aniCvs = document.getElementById("aniCanvas");
+    const aniCtx = aniCvs.getContext("2d");
 
-    # 速度箭头
-    quiv1 = ax_scene.quiver(sim.x1, sim.y1, sim.v1x, sim.v1y, angles='xy', scale_units='xy', scale=3, color='blue', width=0.005)
-    quiv2 = ax_scene.quiver(sim.x2, sim.y2, sim.v2x, sim.v2y, angles='xy', scale_units='xy', scale=3, color='green', width=0.005)
+    // 动画循环
+    function animate() {{
+        if (!playing) {{
+            // 暂停时只重绘当前帧
+            aniCtx.clearRect(0,0,aniCvs.width,aniCvs.height);
+            drawBoundary();
+            drawBall(x1, y1, r1, "#4ecdc4");
+            drawBall(x2, y2, r2, "#ff6b9d");
+            drawArrow(x1, y1, v1x, v1y, "#0066ff");
+            drawArrow(x2, y2, v2x, v2y, "#22aa22");
+            requestAnimationFrame(animate);
+            return;
+        }}
 
-    scene_placeholder = st.pyplot(fig_scene)
+        // 1. 球-球碰撞检测与处理
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist < r1 + r2) {{
+            const nx = dx / dist;
+            const ny = dy / dist;
+            const dvx = v1x - v2x;
+            const dvy = v1y - v2y;
+            const dvn = dvx * nx + dvy * ny;
 
-with col_plots:
-    st.subheader("📊 Physical Curves")
-    fig_plots, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(7, 8), sharex=True)
+            if (dvn <= 0) {{
+                const j = 2 * dvn / (1/m1 + 1/m2);
+                v1x -= j * nx / m1;
+                v1y -= j * ny / m1;
+                v2x += j * nx / m2;
+                v2y += j * ny / m2;
+                // 防止重叠
+                const overlap = (r1 + r2 - dist) / 2;
+                x1 -= overlap * nx;
+                y1 -= overlap * ny;
+                x2 += overlap * nx;
+                y2 += overlap * ny;
+            }}
+        }}
 
-    # 速度时间图
-    ax1.set_title("Velocity - Time")
-    ax1.set_ylabel("Velocity (m/s)")
-    ax1.grid(True, alpha=0.3)
-    line_v1x, = ax1.plot([], [], 'b-', label='v1x')
-    line_v1y, = ax1.plot([], [], 'c--', label='v1y')
-    line_v2x, = ax1.plot([], [], 'r-', label='v2x')
-    line_v2y, = ax1.plot([], [], 'm--', label='v2y')
-    ax1.legend(loc='upper right', fontsize=8)
+        // 2. 边界反弹
+        // 球1
+        if (x1 - r1 < 0 || x1 + r1 > 600) {{
+            v1x *= -1;
+            x1 = Math.max(r1, Math.min(600 - r1, x1));
+        }}
+        if (y1 - r1 < 0 || y1 + r1 > 400) {{
+            v1y *= -1;
+            y1 = Math.max(r1, Math.min(400 - r1, y1));
+        }}
+        // 球2
+        if (x2 - r2 < 0 || x2 + r2 > 600) {{
+            v2x *= -1;
+            x2 = Math.max(r2, Math.min(600 - r2, x2));
+        }}
+        if (y2 - r2 < 0 || y2 + r2 > 400) {{
+            v2y *= -1;
+            y2 = Math.max(r2, Math.min(400 - r2, y2));
+        }}
 
-    # 动能时间图
-    ax2.set_title("Kinetic Energy - Time")
-    ax2.set_ylabel("Kinetic Energy (J)")
-    ax2.grid(True, alpha=0.3)
-    line_ke, = ax2.plot([], [], 'g-', linewidth=2)
+        // 3. 更新位置
+        x1 += v1x;
+        y1 += v1y;
+        x2 += v2x;
+        y2 += v2y;
 
-    # 动量时间图
-    ax3.set_title("Momentum - Time")
-    ax3.set_xlabel("Time (s)")
-    ax3.set_ylabel("Momentum (kg·m/s)")
-    ax3.grid(True, alpha=0.3)
-    line_px, = ax3.plot([], [], 'orange', label='Total Px')
-    line_py, = ax3.plot([], [], 'purple', label='Total Py')
-    ax3.legend(loc='upper right', fontsize=8)
+        // 4. 绘制
+        aniCtx.clearRect(0,0,aniCvs.width,aniCvs.height);
+        drawBoundary();
+        drawBall(x1, y1, r1, "#4ecdc4");
+        drawBall(x2, y2, r2, "#ff6b9d");
+        drawArrow(x1, y1, v1x, v1y, "#0066ff");
+        drawArrow(x2, y2, v2x, v2y, "#22aa22");
 
-    plt.tight_layout()
-    plots_placeholder = st.pyplot(fig_plots)
+        requestAnimationFrame(animate);
+    }}
 
-# -------------------------- 仿真循环 --------------------------
-if st.session_state.running:
-    while st.session_state.running and len(sim.time_history) * sim.dt < max_time:
-        sim.update()
+    // 辅助绘制函数
+    function drawBoundary() {{
+        aniCtx.strokeStyle = "#333";
+        aniCtx.lineWidth = 2;
+        aniCtx.strokeRect(0, 0, 600, 400);
+    }}
+    function drawBall(x, y, r, color) {{
+        aniCtx.beginPath();
+        aniCtx.arc(x, y, r, 0, Math.PI*2);
+        aniCtx.fillStyle = color;
+        aniCtx.fill();
+        aniCtx.strokeStyle = "#fff";
+        aniCtx.lineWidth = 1;
+        aniCtx.stroke();
+    }}
+    function drawArrow(x, y, vx, vy, color) {{
+        const scale = 5;
+        aniCtx.beginPath();
+        aniCtx.moveTo(x, y);
+        aniCtx.lineTo(x + vx*scale, y + vy*scale);
+        aniCtx.strokeStyle = color;
+        aniCtx.lineWidth = 2;
+        aniCtx.stroke();
+    }}
 
-        # 更新场景图
-        circle1.center = (sim.x1, sim.y1)
-        circle2.center = (sim.x2, sim.y2)
-        quiv1.set_offsets([sim.x1, sim.y1])
-        quiv1.set_UVC(sim.v1x, sim.v1y)
-        quiv2.set_offsets([sim.x2, sim.y2])
-        quiv2.set_UVC(sim.v2x, sim.v2y)
+    animate();
+</script>
+'''
+st.components.v1.html(html_code, height=450)
 
-        scene_placeholder.pyplot(fig_scene)
+# -------------------------- 保留你原来的物理曲线图（Python端生成） --------------------------
+st.markdown("---")
+st.subheader("📊 Physical Curves")
 
-        # 更新曲线图
-        t = np.array(sim.time_history)
-        line_v1x.set_data(t, sim.v1x_history)
-        line_v1y.set_data(t, sim.v1y_history)
-        line_v2x.set_data(t, sim.v2x_history)
-        line_v2y.set_data(t, sim.v2y_history)
-        line_ke.set_data(t, sim.ke_history)
-        line_px.set_data(t, sim.px_history)
-        line_py.set_data(t, sim.py_history)
+# 计算理论曲线数据
+v1_final = ((m1 - m2) * v1x + 2 * m2 * v2x) / (m1 + m2)
+v2_final = ((m2 - m1) * v2x + 2 * m1 * v1x) / (m1 + m2)
 
-        # 调整坐标轴范围
-        ax1.set_xlim(0, max(t) + 0.5)
-        ax1.relim()
-        ax1.autoscale_view(scalex=False, scaley=True)
-        ax2.relim()
-        ax2.autoscale_view(scalex=False, scaley=True)
-        ax3.relim()
-        ax3.autoscale_view(scalex=False, scaley=True)
+t_total = 0.03
+dt_data = 0.0003
+t = np.arange(0, t_total, dt_data)
+t_collision = t_total * 0.5
 
-        plots_placeholder.pyplot(fig_plots)
+v1_list = []
+v2_list = []
+ke_list = []
+p_list = []
 
-        # 控制帧率
-        time.sleep(0.05)
+for ti in t:
+    if ti < t_collision:
+        cv1 = v1x
+        cv2 = v2x
+    else:
+        cv1 = v1_final
+        cv2 = v2_final
+    
+    ke = 0.5 * m1 * cv1**2 + 0.5 * m2 * cv2**2
+    p = m1 * cv1 + m2 * cv2
+    
+    v1_list.append(cv1)
+    v2_list.append(cv2)
+    ke_list.append(ke)
+    p_list.append(p)
 
-        # 刷新页面
-        st.rerun()
+# 绘制三张曲线
+fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(9, 5), sharex=True)
 
-st.info("Tips: Click Play to start, Pause to stop, Reset to restore initial state.")
+ax1.plot(t, v1_list, color="#4ecdc4", label="Ball1 vx")
+ax1.plot(t, v2_list, color="#ff6b9d", label="Ball2 vx")
+ax1.set_title("Velocity - Time")
+ax1.set_ylabel("Velocity (m/s)")
+ax1.legend()
+ax1.grid(alpha=0.3)
+
+ax2.plot(t, ke_list, color="#2ca02c")
+ax2.set_title("Kinetic Energy - Time")
+ax2.set_ylabel("KE (J)")
+ax2.grid(alpha=0.3)
+
+ax3.plot(t, p_list, color="#ff7f0e")
+ax3.set_title("Momentum - Time")
+ax3.set_xlabel("Time (s)")
+ax3.set_ylabel("Momentum (kg·m/s)")
+ax3.grid(alpha=0.3)
+
+plt.tight_layout()
+st.pyplot(fig)
