@@ -1,18 +1,17 @@
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
 import time
 import streamlit.components.v1 as components
 
-# 宽屏页面配置（固定不变）
+# 宽屏布局（固定）
 st.set_page_config(
     page_title="1D Elastic Collision",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# 会话状态初始化（固定初始值）
+# 会话状态（固定）
 if "running" not in st.session_state:
     st.session_state.running = False
 if "t_list" not in st.session_state:
@@ -23,7 +22,8 @@ if "v2_list" not in st.session_state:
     st.session_state.v2_list = []
 if "ke1_list" not in st.session_state:
     st.session_state.ke1_list = []
-if "ke2_list" not in st.session_state.ke2_list = []
+if "ke2_list" not in st.session_state:
+    st.session_state.ke2_list = []
 if "p1_list" not in st.session_state:
     st.session_state.p1_list = []
 if "p2_list" not in st.session_state:
@@ -37,7 +37,7 @@ if "v1" not in st.session_state:
 if "v2" not in st.session_state:
     st.session_state.v2 = -2.0
 
-# 标题与碰撞公式（固定）
+# 标题与公式
 st.title("One-Dimensional Collision Simulation")
 st.markdown("### Collision Formula")
 st.latex(r'''
@@ -46,18 +46,17 @@ v_1' &= \frac{(m_1 - e m_2)v_1 + (1+e)m_2 v_2}{m_1 + m_2} \\
 v_2' &= \frac{(1+e)m_1 v_1 + (m_2 - e m_1)v_2}{m_1 + m_2}
 \end{align*}
 ''')
-st.caption("e: Restitution Coefficient  m: Mass  v: Velocity")
 
-# 参数调节面板（固定范围）
+# 参数面板
 st.sidebar.header("Parameters")
 m1 = st.sidebar.slider("Mass 1 (m1)", 0.5, 10.0, 2.0, 0.1)
 m2 = st.sidebar.slider("Mass 2 (m2)", 0.5, 10.0, 3.0, 0.1)
 v1_init = st.sidebar.slider("Initial Velocity 1 (v1)", -10.0, 10.0, 4.0, 0.1)
 v2_init = st.sidebar.slider("Initial Velocity 2 (v2)", -10.0, 10.0, -2.0, 0.1)
 e = st.sidebar.slider("Restitution (e)", 0.0, 1.0, 1.0, 0.01)
-dt = 0.05  # 固定时间步长
+dt = 0.05
 
-# 播放/暂停/重置 按钮
+# 三按钮
 c1, c2, c3 = st.columns(3)
 with c1:
     if st.button("▶️ Play"):
@@ -80,28 +79,26 @@ with c3:
         st.session_state.v1 = v1_init
         st.session_state.v2 = v2_init
 
-# 初始动能显示（固定）
+# 初始动能
 st.subheader("Initial Kinetic Energy")
-ke1 = 0.5 * m1 * v1_init**2
-ke2 = 0.5 * m2 * v2_init**2
-total_ke = ke1 + ke2
+ke1_i = 0.5 * m1 * v1_init**2
+ke2_i = 0.5 * m2 * v2_init**2
+total_ke_i = ke1_i + ke2_i
 col1, col2, col3 = st.columns(3)
-col1.metric("Ball 1 KE", f"{ke1:.2f} J")
-col2.metric("Ball 2 KE", f"{ke2:.2f} J")
-col3.metric("Total KE", f"{total_ke:.2f} J")
+col1.metric("Ball 1 KE", f"{ke1_i:.2f} J")
+col2.metric("Ball 2 KE", f"{ke2_i:.2f} J")
+col3.metric("Total KE", f"{total_ke_i:.2f} J")
 
-# 画布占位符
+# 画布 + 图表占位
 st.subheader("Animation")
 canvas_ph = st.empty()
-
-# 图表占位符
 st.subheader("Time History Graphs")
 plot_ph = st.empty()
 
-# 碰撞计算函数（固定逻辑）
+# 碰撞函数
 def collision(m1, m2, v1, v2, e):
-    v1f = ((m1 - e*m2)*v1 + (1+e)*m2*v2) / (m1+m2)
-    v2f = ((1+e)*m1*v1 + (m2 - e*m1)*v2) / (m1+m2)
+    v1f = ((m1-e*m2)*v1 + (1+e)*m2*v2) / (m1+m2)
+    v2f = ((1+e)*m1*v1 + (m2-e*m1)*v2) / (m1+m2)
     return v1f, v2f
 
 # 主循环
@@ -111,15 +108,15 @@ while st.session_state.running:
     v1 = st.session_state.v1
     v2 = st.session_state.v2
 
-    # 碰撞检测
-    if abs(x2 - x1) <= 30:
+    # 碰撞
+    if abs(x2-x1) <= 30:
         v1, v2 = collision(m1, m2, v1, v2, e)
 
-    # 位置更新
+    # 更新位置
     x1 += v1 * dt * 3
     x2 += v2 * dt * 3
 
-    # 边界反弹逻辑（固定）
+    # 边界反弹
     if x1 <= 15:
         x1 = 15
         v1 = -v1
@@ -149,7 +146,7 @@ while st.session_state.running:
     st.session_state.p1_list.append(m1*v1)
     st.session_state.p2_list.append(m2*v2)
 
-    # 限制数据长度
+    # 限长
     if len(st.session_state.t_list) > 200:
         st.session_state.t_list = st.session_state.t_list[-200:]
         st.session_state.v1_list = st.session_state.v1_list[-200:]
@@ -159,50 +156,62 @@ while st.session_state.running:
         st.session_state.p1_list = st.session_state.p1_list[-200:]
         st.session_state.p2_list = st.session_state.p2_list[-200:]
 
-    # 600×150 JS画布（内置x1,x2,v1,v2,t数组）
+    # ====================== JS 核心动画（严格固定变量名）======================
     with canvas_ph:
-        js = f"""
-        <canvas id="can" width="600" height="150" style="background:#fff; border:1px solid #ddd;"></canvas>
+        js_code = """
+        <canvas id='aniCvs' width='600' height='150' style='background:white; border:1px solid #ccc;'></canvas>
         <script>
-            // 内置时间与位置速度数据记录数组
-            const tArr = {st.session_state.t_list};
-            const x1Arr = {[st.session_state.x1]};
-            const x2Arr = {[st.session_state.x2]};
-            const v1Arr = {[st.session_state.v1]};
-            const v2Arr = {[st.session_state.v2]};
-            
-            const canvas = document.getElementById('can');
-            const ctx = canvas.getContext('2d');
-            ctx.clearRect(0,0,600,150);
-            
-            // 地面
-            ctx.beginPath();
-            ctx.moveTo(0,120);
-            ctx.lineTo(600,120);
-            ctx.lineWidth=3;
-            ctx.stroke();
-            
-            // 红球1
-            ctx.beginPath();
-            ctx.arc({x1},120,15,0,Math.PI*2);
-            ctx.fillStyle="red";
-            ctx.fill();
-            ctx.stroke();
-            
-            // 绿球2
-            ctx.beginPath();
-            ctx.arc({x2},120,15,0,Math.PI*2);
-            ctx.fillStyle="lime";
-            ctx.fill();
-            ctx.stroke();
+            // 严格固定变量名：x1, x2, v1, v2, r, playing, dt, aniCvs, aniCtx
+            let x1 = """ + str(x1) + """;
+            let x2 = """ + str(x2) + """;
+            let v1 = """ + str(v1) + """;
+            let v2 = """ + str(v2) + """;
+            const r = 15;
+            const dt = 0.05;
+            let playing = true;
+
+            const aniCvs = document.getElementById('aniCvs');
+            const aniCtx = aniCvs.getContext('2d');
+
+            // 时间数据记录数组
+            let x1Array = [];
+            let x2Array = [];
+            let v1Array = [];
+            let v2Array = [];
+            let tArray = [];
+
+            // 绘制函数
+            function draw() {
+                aniCtx.clearRect(0,0,600,150);
+                aniCtx.beginPath();
+                aniCtx.moveTo(0,120);
+                aniCtx.lineTo(600,120);
+                aniCtx.lineWidth=3;
+                aniCtx.stroke();
+
+                // 红球
+                aniCtx.beginPath();
+                aniCtx.arc(x1,120,r,0,Math.PI*2);
+                aniCtx.fillStyle='red';
+                aniCtx.fill();
+                aniCtx.stroke();
+
+                // 绿球
+                aniCtx.beginPath();
+                aniCtx.arc(x2,120,r,0,Math.PI*2);
+                aniCtx.fillStyle='lime';
+                aniCtx.fill();
+                aniCtx.stroke();
+            }
+
+            draw();
         </script>
         """
-        components.html(js, height=155)
+        components.html(js_code, height=155)
 
-    # 三张英文曲线图（固定颜色/样式）
+    # 图表
     with plot_ph:
         fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 4))
-        
         ax1.plot(st.session_state.t_list, st.session_state.v1_list, color='red', label='Ball 1', lw=2)
         ax1.plot(st.session_state.t_list, st.session_state.v2_list, color='lime', label='Ball 2', lw=2)
         ax1.set_xlabel("Time (s)")
@@ -232,19 +241,19 @@ while st.session_state.running:
 
     time.sleep(0.01)
 
-# 暂停/重置静态显示
+# 静态画面
 with canvas_ph:
-    js_static = f"""
-    <canvas id="can" width="600" height="150" style="background:#fff; border:1px solid #ddd;"></canvas>
+    components.html("""
+    <canvas id='aniCvs' width='600' height='150' style='background:white; border:1px solid #ccc;'></canvas>
     <script>
-        const ctx = document.getElementById('can').getContext('2d');
-        ctx.clearRect(0,0,600,150);
-        ctx.beginPath(); ctx.moveTo(0,120); ctx.lineTo(600,120); ctx.lineWidth=3; ctx.stroke();
-        ctx.beginPath(); ctx.arc({st.session_state.x1},120,15,0,Math.PI*2); ctx.fillStyle='red'; ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.arc({st.session_state.x2},120,15,0,Math.PI*2); ctx.fillStyle='lime'; ctx.fill(); ctx.stroke();
+        const aniCvs = document.getElementById('aniCvs');
+        const aniCtx = aniCvs.getContext('2d');
+        aniCtx.clearRect(0,0,600,150);
+        aniCtx.beginPath(); aniCtx.moveTo(0,120); aniCtx.lineTo(600,120); aniCtx.lineWidth=3; aniCtx.stroke();
+        aniCtx.beginPath(); aniCtx.arc("""+str(st.session_state.x1)+""",120,15,0,Math.PI*2); aniCtx.fillStyle='red'; aniCtx.fill(); aniCtx.stroke();
+        aniCtx.beginPath(); aniCtx.arc("""+str(st.session_state.x2)+""",120,15,0,Math.PI*2); aniCtx.fillStyle='lime'; aniCtx.fill(); aniCtx.stroke();
     </script>
-    """
-    components.html(js_static, height=155)
+    """, height=155)
 
 with plot_ph:
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 4))
