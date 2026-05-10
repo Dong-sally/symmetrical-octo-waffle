@@ -1,206 +1,159 @@
 import streamlit as st
 import numpy as np
-import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 
-# ====================== Page Config ======================
-st.set_page_config(
-    page_title="1D Elastic Collision Simulation",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(layout="wide", page_title="1D Head-On Collision Simulation")
 
-# ====================== Session State Init ======================
-if "is_running" not in st.session_state:
-    st.session_state.is_running = False
-if "reset_flag" not in st.session_state:
-    st.session_state.reset_flag = True
-if "time_data" not in st.session_state:
-    st.session_state.time_data = []
-if "v1_data" not in st.session_state:
+# Session State Init
+def reset_all():
+    st.session_state.run = False
+    st.session_state.t_list = [0.0]
     st.session_state.v1_data = []
-if "v2_data" not in st.session_state:
     st.session_state.v2_data = []
-if "ek_data" not in st.session_state:
-    st.session_state.ek_data = []
-if "p_data" not in st.session_state:
-    st.session_state.p_data = []
+    st.session_state.ke1_data = []
+    st.session_state.ke2_data = []
+    st.session_state.ke_total = []
+    st.session_state.p1_data = []
+    st.session_state.p2_data = []
+    st.session_state.p_total = []
+    st.session_state.pos1 = 100
+    st.session_state.pos2 = 300
 
-# ====================== Collision Formula ======================
-def collision_velocity(m1, m2, v1, v2, e):
-    v1f = ((m1 - e * m2) * v1 + (1 + e) * m2 * v2) / (m1 + m2)
-    v2f = ((m2 - e * m1) * v2 + (1 + e) * m1 * v1) / (m1 + m2)
-    return v1f, v2f
+if "run" not in st.session_state:
+    reset_all()
 
-# ====================== Main Layout ======================
-col_ctrl, col_param = st.columns([3, 1])
-
-# Control Buttons
-with col_ctrl:
-    btn_play, btn_pause, btn_reset = st.columns(3)
-    with btn_play:
-        play = st.button("▶ Play", use_container_width=True)
-    with btn_pause:
-        pause = st.button("⏸ Pause", use_container_width=True)
-    with btn_reset:
-        reset = st.button("🔄 Reset", use_container_width=True)
-
-# Parameter Settings
-with col_param:
-    st.subheader("Parameter Settings")
+# Sidebar Parameter
+with st.sidebar:
+    st.header("Simulation Parameters")
     m1 = st.slider("Mass m1 (kg)", 0.5, 5.0, 1.0, 0.1)
     m2 = st.slider("Mass m2 (kg)", 0.5, 5.0, 1.0, 0.1)
-    v1_init = st.slider("Initial Velocity v1 (m/s)", -5.0, 5.0, 2.0, 0.1)
-    v2_init = st.slider("Initial Velocity v2 (m/s)", -5.0, 5.0, 0.0, 0.1)
-    e = st.slider("Restitution Coefficient e", 0.0, 1.0, 1.0, 0.05)
+    v1_init = st.slider("Initial Velocity v1 (m/s)", -5.0, 5.0, 3.0, 0.1)
+    v2_init = st.slider("Initial Velocity v2 (m/s)", -5.0, 5.0, -1.0, 0.1)
+    e = st.slider("Coefficient of Restitution e", 0.0, 1.0, 1.0, 0.01)
+    dt = 0.02
 
-# Initial Kinetic Energy Display
-ek_initial = 0.5 * m1 * v1_init**2 + 0.5 * m2 * v2_init**2
-st.metric("Initial Total Kinetic Energy (J)", f"{ek_initial:.3f}")
+# Top Control Button
+col_btn1, col_btn2, col_btn3, col_info = st.columns([1,1,1,4])
+with col_btn1:
+    play = st.button("Play")
+with col_btn2:
+    pause = st.button("Pause")
+with col_btn3:
+    reset = st.button("Reset")
 
-# Button Logic
 if play:
-    st.session_state.is_running = True
-    st.session_state.reset_flag = False
+    st.session_state.run = True
 if pause:
-    st.session_state.is_running = False
+    st.session_state.run = False
 if reset:
-    st.session_state.is_running = False
-    st.session_state.reset_flag = True
-    st.session_state.time_data.clear()
-    st.session_state.v1_data.clear()
-    st.session_state.v2_data.clear()
-    st.session_state.ek_data.clear()
-    st.session_state.p_data.clear()
+    reset_all()
 
-# ====================== HTML Canvas Animation ======================
-canvas_html = f"""
-<html>
-<head>
-<meta charset="utf-8">
+# Initial Physical Data
+ke1_0 = 0.5 * m1 * v1_init ** 2
+ke2_0 = 0.5 * m2 * v2_init ** 2
+total_ke0 = ke1_0 + ke2_0
+p1_0 = m1 * v1_init
+p2_0 = m2 * v2_init
+total_p0 = p1_0 + p2_0
+
+with col_info:
+    st.info(f"Initial Total KE: {total_ke0:.2f} J | Initial Total Momentum: {total_p0:.2f} kg·m/s")
+
+# Canvas Animation HTML
+ball_html = """
 <style>
-body{{margin:0;padding:10px;background:#f5f7fa;}}
-#canvas{{border:2px solid #444;border-radius:8px;background:#ffffff;}}
+.box{width:700px;height:120px;background:#f5f5f5;border:1px solid #ccc;position:relative;border-radius:8px;}
+.ball1{width:40px;height:40px;border-radius:50%;background:#ff4444;position:absolute;top:40px;}
+.ball2{width:40px;height:40px;border-radius:50%;background:#00cccc;position:absolute;top:40px;}
 </style>
-</head>
-<body>
-<canvas id="canvas" width="900" height="180"></canvas>
+<div class="box">
+    <div class="ball1" id="b1"></div>
+    <div class="ball2" id="b2"></div>
+</div>
 <script>
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
-let w = canvas.width, h = canvas.height;
-
-// Physical Params
-let m1 = {m1}, m2 = {m2};
-let v1 = {v1_init}, v2 = {v2_init};
-let e = {e};
-let x1 = 80, x2 = 350;
-let r = 25;
-let run = {str(st.session_state.is_running).lower()};
-let reset = {str(st.session_state.reset_flag).lower()};
-
-function resetBall(){{
-    x1 = 80; x2 = 350;
-    v1 = {v1_init}; v2 = {v2_init};
-}}
-if(reset) resetBall();
-
-function draw(){{
-    ctx.clearRect(0,0,w,h);
-    // Ground line
-    ctx.beginPath();
-    ctx.moveTo(0, h/2+35);
-    ctx.lineTo(w, h/2+35);
-    ctx.strokeStyle="#999";ctx.lineWidth=2;ctx.stroke();
-
-    // Ball1 Red
-    ctx.beginPath();
-    ctx.arc(x1, h/2, r, 0, Math.PI*2);
-    ctx.fillStyle="#ff4444";ctx.fill();ctx.stroke();
-    // Ball2 Cyan
-    ctx.beginPath();
-    ctx.arc(x2, h/2, r, 0, Math.PI*2);
-    ctx.fillStyle="#00cccc";ctx.fill();ctx.stroke();
-
-    // Collision judge
-    if(x1 + r >= x2 - r){{
-        let v1f = ((m1 - e*m2)*v1 + (1+e)*m2*v2)/(m1+m2);
-        let v2f = ((m2 - e*m1)*v2 + (1+e)*m1*v1)/(m1+m2);
-        v1 = v1f; v2 = v2f;
-    }}
-    // Wall bounce
-    if(x1 - r <= 0 || x1 + r >= w) v1 *= -1;
-    if(x2 - r <= 0 || x2 + r >= w) v2 *= -1;
-
-    if(run){{
-        x1 += v1;
-        x2 += v2;
-    }}
-    requestAnimationFrame(draw);
-}}
-draw();
+let p1=%d,p2=%d;
+document.getElementById("b1").style.left=p1+"px";
+document.getElementById("b2").style.left=p2+"px";
 </script>
-</body>
-</html>
 """
-st.components.v1.html(canvas_html, height=220)
+st.components.v1.html(ball_html % (st.session_state.pos1, st.session_state.pos2), height=150)
 
-# ====================== Data Record & Plot ======================
-dt = 0.05
-if st.session_state.is_running and not st.session_state.reset_flag:
-    last_t = st.session_state.time_data[-1] if st.session_state.time_data else 0
-    current_t = last_t + dt
+# Collision Calculation Function
+def collision_calc(v1, v2, m1, m2, e):
+    v1_new = ((m1 - e*m2)*v1 + (1+e)*m2*v2) / (m1 + m2)
+    v2_new = ((m2 - e*m1)*v2 + (1+e)*m1*v1) / (m1 + m2)
+    return v1_new, v2_new
 
-    if len(st.session_state.v1_data) == 0:
-        cv1, cv2 = v1_init, v2_init
-    else:
-        cv1 = st.session_state.v1_data[-1]
-        cv2 = st.session_state.v2_data[-1]
+# Simulation Logic
+if st.session_state.run:
+    v1, v2 = v1_init, v2_init
+    pos1 = st.session_state.pos1
+    pos2 = st.session_state.pos2
 
-    # Simple record data
-    total_p = m1 * cv1 + m2 * cv2
-    total_ek = 0.5*m1*cv1**2 + 0.5*m2*cv2**2
+    # Collision judge
+    if abs(pos1 - pos2) <= 40:
+        v1, v2 = collision_calc(v1, v2, m1, m2, e)
+        if pos1 > pos2:
+            pos1 += 2
+        else:
+            pos2 -= 2
 
-    st.session_state.time_data.append(current_t)
-    st.session_state.v1_data.append(cv1)
-    st.session_state.v2_data.append(cv2)
-    st.session_state.p_data.append(total_p)
-    st.session_state.ek_data.append(total_ek)
+    # Boundary rebound
+    if pos1 <= 0 or pos1 >= 660:
+        v1 = -v1
+    if pos2 <= 0 or pos2 >= 660:
+        v2 = -v2
 
-# Draw three charts
-col1, col2, col3 = st.columns(3)
+    pos1 += v1 * dt * 80
+    pos2 += v2 * dt * 80
 
-# 1. Velocity-Time
-df_v = pd.DataFrame({
-    "Time(s)": st.session_state.time_data,
-    "v1(m/s)": st.session_state.v1_data,
-    "v2(m/s)": st.session_state.v2_data
-})
-fig_v = px.line(df_v, x="Time(s)", y=["v1(m/s)","v2(m/s)"],
-                title="Velocity - Time Curve")
-fig_v.update_layout(xaxis_title="Time (s)", yaxis_title="Velocity (m/s)")
-with col1:
-    st.plotly_chart(fig_v, use_container_width=True)
+    st.session_state.pos1 = pos1
+    st.session_state.pos2 = pos2
 
-# 2. Kinetic Energy-Time
-df_ek = pd.DataFrame({
-    "Time(s)": st.session_state.time_data,
-    "Total_Energy(J)": st.session_state.ek_data
-})
-fig_ek = px.line(df_ek, x="Time(s)", y="Total_Energy(J)",
-                 title="Kinetic Energy - Time Curve", color_discrete_sequence=["#ff4444"])
-fig_ek.update_layout(xaxis_title="Time (s)", yaxis_title="Kinetic Energy (J)")
-with col2:
-    st.plotly_chart(fig_ek, use_container_width=True)
+    # Record data
+    now_t = st.session_state.t_list[-1] + dt
+    st.session_state.t_list.append(now_t)
+    st.session_state.v1_data.append(v1)
+    st.session_state.v2_data.append(v2)
 
-# 3. Momentum-Time
-df_p = pd.DataFrame({
-    "Time(s)": st.session_state.time_data,
-    "Total_Momentum": st.session_state.p_data
-})
-fig_p = px.line(df_p, x="Time(s)", y="Total_Momentum",
-                title="Momentum - Time Curve", color_discrete_sequence=["#00cccc"])
-fig_p.update_layout(xaxis_title="Time (s)", yaxis_title="Momentum (kg·m/s)")
-with col3:
-    st.plotly_chart(fig_p, use_container_width=True)
+    ke1 = 0.5*m1*v1**2
+    ke2 = 0.5*m2*v2**2
+    st.session_state.ke1_data.append(ke1)
+    st.session_state.ke2_data.append(ke2)
+    st.session_state.ke_total.append(ke1+ke2)
+
+    st.session_state.p1_data.append(m1*v1)
+    st.session_state.p2_data.append(m2*v2)
+    st.session_state.p_total.append(m1*v1+m2*v2)
+    st.rerun()
+
+# Draw Three Standard Charts with Scale
+if len(st.session_state.t_list) > 2:
+    c1, c2, c3 = st.columns(3)
+    t = st.session_state.t_list
+
+    # Velocity-Time
+    with c1:
+        fig1 = go.Figure()
+        fig1.add_trace(go.Scatter(x=t,y=st.session_state.v1_data,name="Ball1 Velocity",line=dict(color="red")))
+        fig1.add_trace(go.Scatter(x=t,y=st.session_state.v2_data,name="Ball2 Velocity",line=dict(color="cyan")))
+        fig1.update_layout(title="Velocity - Time Curve",xaxis_title="Time(s)",yaxis_title="Velocity(m/s)",xaxis=dict(showgrid=True),yaxis=dict(showgrid=True))
+        st.plotly_chart(fig1,use_container_width=True)
+
+    # Kinetic Energy-Time
+    with c2:
+        fig2 = go.Figure()
+        fig2.add_trace(go.Scatter(x=t,y=st.session_state.ke1_data,name="Ball1 KE",line=dict(color="red")))
+        fig2.add_trace(go.Scatter(x=t,y=st.session_state.ke2_data,name="Ball2 KE",line=dict(color="cyan")))
+        fig2.add_trace(go.Scatter(x=t,y=st.session_state.ke_total,name="Total KE",line=dict(color="black",dash="dash")))
+        fig2.update_layout(title="Kinetic Energy - Time Curve",xaxis_title="Time(s)",yaxis_title="Energy(J)",xaxis=dict(showgrid=True),yaxis=dict(showgrid=True))
+        st.plotly_chart(fig2,use_container_width=True)
+
+    # Momentum-Time
+    with c3:
+        fig3 = go.Figure()
+        fig3.add_trace(go.Scatter(x=t,y=st.session_state.p1_data,name="Ball1 Momentum",line=dict(color="red")))
+        fig3.add_trace(go.Scatter(x=t,y=st.session_state.p2_data,name="Ball2 Momentum",line=dict(color="cyan")))
+        fig3.add_trace(go.Scatter(x=t,y=st.session_state.p_total,name="Total Momentum",line=dict(color="black",dash="dash")))
+        fig3.update_layout(title="Momentum - Time Curve",xaxis_title="Time(s)",yaxis_title="Momentum(kg·m/s)",xaxis=dict(showgrid=True),yaxis=dict(showgrid=True))
+        st.plotly_chart(fig3,use_container_width=True)
